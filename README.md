@@ -1,7 +1,27 @@
 # Style Transfer with IG
 
 ## Basic Seq2Seq Model
- * soon...
+ * Now working: In Seop, Youn
 
+## Basic Seq2Seq Model 2
+ * Now working: Do Hyeon, Lee
+ * Structure
+ * Prepro
+   * Download yelp data into `[PROJECT_DIR]/data/yelp`. We need the file `[PROJECT_DIR]/data/yelp/yelp_academic_dataset_review.json`.
+   * Run the code below. It will make `train.data`, `dev.data`, `test.data` in the `[PROJECT_DIR]/seq2seq2/data/` folder.
+```
+python -m seq2seq2.prepro
+```
+ * Train
+   * Run the code below. `--mode train` can be ommited while default mode is train.
+```
+python -m seq2seq2.main --mode train
+```
+ * Test
+   * Run the code below.
+```
+python -m seq2seq2.main --mode test
+```
 ## DP-GAN
- * running in Dong-Bang
+ * Now working: None
+ * We decided to hold on until basic seq2seq model was completed.
