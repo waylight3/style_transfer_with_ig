@@ -1,9 +1,13 @@
 import tensorflow as tf
-import json, sys, os
+import argparse, json, sys, os
 from util.util import pgbar
 
 if __name__ == '__main__':
-	with open('data/yelp/yelp_academic_dataset_review.json', 'r') as fp:
-		for i in range(10):
-			data = fp.readline()
-			print(data)
+	parser = argparse.ArgumentParser(description='This is main file of the seq2seq2 sub project')
+	parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'])
+	args = parser.parse_args()
+
+	if args.mode == 'train':
+		print('train? comming soon...')
+	elif args.mode == 'test':
+		print('test? comming soon...')
