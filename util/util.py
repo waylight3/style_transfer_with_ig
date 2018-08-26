@@ -1,6 +1,6 @@
 import time, os
 
-def pgbar(data, pre='', post='', bar_icon='=', space_icon=' ', show_running_time=True, end='\r'):
+def pgbar(data, pre='', post='', bar_icon='=', space_icon=' ', total_display=1000, show_running_time=True, end='\r'):
 	'PRE [PGBAR] [000%] [00h00m00s] POST'
 
 	size = len(data)
@@ -18,8 +18,11 @@ def pgbar(data, pre='', post='', bar_icon='=', space_icon=' ', show_running_time
 		hour = total_time // 3600
 		minute = total_time % 3600 // 60
 		second = total_time % 60
+		running_time = ''
 		if show_running_time:
-			print('%s [%s%s] [%3d%%] [%02dh%02dm%02ds] %s' % (pre, bar, space, hour, minute, second, 100 * (i + 1) // size, post), end=end)
-		else:
-			print('%s [%s%s] [%3d%%] %s' % (pre, bar, space, hour, minute, second, 100 * (i + 1) // size, post), end=end)
+			running_time = ' [%02dh%02dm%02ds]' % (hour, minute, second)
+		if i % (size // total_display) == 0 or i == size - 1:
+			print('%s [%s%s] [%3d%%]%s %s' % (pre, bar, space, 100 * (i + 1) // size, running_time, post), end=end)
+		if i == size - 1:
+			print('')
 		yield d

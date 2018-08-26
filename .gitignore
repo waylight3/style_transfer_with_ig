@@ -3,7 +3,7 @@
 # ============== #
 data/
 seq2seq/data
-sea2seq2/data
+seq2seq2/data
 
 # ============ #
 # OS generated #

@@ -18,9 +18,9 @@ if __name__ == '__main__':
 	### read data line by line
 	print('[PREPRO] loading yelp data start')
 	with open('data/yelp/yelp_academic_dataset_review.json', 'r', encoding='utf-8') as fp:
-		for d in pgbar(fp.read().strip().split('\n'), pre='[PREPRO]'):
+		for d in pgbar(fp.read().strip().split('\n'), pre='[yelp_academic_dataset_review.json]'):
 			data.append(json.loads(d))
-	print('[PREPRO] loading yelp data finish')
+	print('[PREPRO] loading yelp data finish (total %d lines)' % len(data))
 
 	### split data
 	print('[PREPRO] splitting data start')
@@ -35,16 +35,19 @@ if __name__ == '__main__':
 
 	### save data
 	print('[PREPRO] saving data start')
+	# check is data folder exists
+	if not os.path.exists('seq2seq2/data'):
+		os.makedirs('seq2seq2/data')
 	# save train data
-	with open('train.data', 'w', encoding='utf-8') as fp:
-		for d in pgbar(data_train, pre='[PREPRO]'):
+	with open('seq2seq2/data/train.data', 'w', encoding='utf-8') as fp:
+		for d in pgbar(data_train, pre='[train.data]'):
 			fp.write(json.dumps(d) + '\n')
 	# save dev data
-	with open('dev.data', 'w', encoding='utf-8') as fp:
-		for d in pgbar(data_dev, pre='[PREPRO]'):
+	with open('seq2seq2/data/dev.data', 'w', encoding='utf-8') as fp:
+		for d in pgbar(data_dev, pre='[dev.data]'):
 			fp.write(json.dumps(d) + '\n')
 	# save test data
-	with open('test.data', 'w', encoding='utf-8') as fp:
-		for d in pgbar(data_test, pre='[PREPRO]'):
+	with open('seq2seq2/data/test.data', 'w', encoding='utf-8') as fp:
+		for d in pgbar(data_test, pre='[test.data]'):
 			fp.write(json.dumps(d) + '\n')
-	print('[PREPRO] saving data start')
+	print('[PREPRO] saving data finish')
