@@ -2,6 +2,8 @@
 # data generated #
 # ============== #
 data/
+seq2seq/data
+sea2seq2/data
 
 # ============ #
 # OS generated #
