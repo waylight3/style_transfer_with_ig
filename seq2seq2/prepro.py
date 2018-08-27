@@ -6,7 +6,7 @@ from util.util import pgbar
 if __name__ == '__main__':
 	### parsing arguments
 	parser = argparse.ArgumentParser(description='This is main file of the seq2seq2 sub project')
-	parser.add_argument('--total_data_size', type=int, default=100000, hint='use all data if total_data_size = 0')
+	parser.add_argument('--total_data_size', type=int, default=100000, help='use all data if total_data_size = 0')
 	parser.add_argument('--train_ratio', type=float, default=0.7)
 	parser.add_argument('--dev_ratio', type=float, default=0.2)
 	parser.add_argument('--word_top', type=int, default=1000)
