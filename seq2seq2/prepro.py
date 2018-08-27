@@ -4,9 +4,18 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 from util.util import pgbar
 
 if __name__ == '__main__':
+	### parsing arguments
+	parser = argparse.ArgumentParser(description='This is main file of the seq2seq2 sub project')
+	parser.add_argument('--total_data_size', type=int, default=100000, hint='use all data if total_data_size = 0')
+	parser.add_argument('--train_ratio', type=float, default=0.7)
+	parser.add_argument('--dev_ratio', type=float, default=0.2)
+	parser.add_argument('--word_top', type=int, default=1000)
+	args = parser.parse_args()
+
 	### data split ratio for cross validation
-	train_ratio = 0.7
-	dev_ratio = 0.2
+	total_data_size = args.total_data_size
+	train_ratio = args.train_ratio
+	dev_ratio = args.dev_ratio
 	
 	### data list for splitted data
 	data = []
@@ -15,13 +24,12 @@ if __name__ == '__main__':
 	data_test = []
 
 	### for word2vec dict
-	word_top = 1000
+	word_top = args.word_top
 	word_dict = {}
 	word_cnt = {}
 
 	#################### prepro data ####################
-
-	print('[PREPRO] setting: train_ratio(%.2f) / dev_ratio(%.2f) / test_ratio(%.2f)' % (train_ratio, dev_ratio, 1.0 - train_ratio - dev_ratio))
+	print('[PREPRO] setting: total_data_size(%d) / train_ratio(%.2f) / dev_ratio(%.2f) / test_ratio(%.2f)' % (total_data_size, train_ratio, dev_ratio, 1.0 - train_ratio - dev_ratio))
 
 	### read data line by line
 	print('[PREPRO] loading yelp data start')
@@ -34,6 +42,8 @@ if __name__ == '__main__':
 	print('[PREPRO] splitting data start')
 	# shuffle data to remove order-bias
 	random.shuffle(data)
+	if total_data_size > 0:
+		data = data[:total_data_size]
 	# split into train/dev/test
 	data_size = len(data)
 	data_train = data[:int(data_size * train_ratio)]
@@ -61,7 +71,6 @@ if __name__ == '__main__':
 	print('[PREPRO] saving data finish')
 
 	#################### prepro word2vec ####################
-
 	print('[PREPRO] setting: word_top(%d)' % word_top)
 
 	### split into sentences/words and count all words
