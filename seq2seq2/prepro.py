@@ -1,5 +1,5 @@
 import tensorflow as tf
-import random, json, sys, os
+import argparse, random, json, sys, os
 from nltk.tokenize import sent_tokenize, word_tokenize
 from util.util import pgbar
 
