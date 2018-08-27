@@ -21,7 +21,7 @@ def pgbar(data, pre='', post='', bar_icon='=', space_icon=' ', total_display=100
 		running_time = ''
 		if show_running_time:
 			running_time = ' [%02dh%02dm%02ds]' % (hour, minute, second)
-		if i % (size // total_display) == 0 or i == size - 1:
+		if size < total_display or i % (size // total_display) == 0 or i == size - 1:
 			print('%s [%s%s] [%3d%%]%s %s' % (pre, bar, space, 100 * (i + 1) // size, running_time, post), end=end)
 		if i == size - 1:
 			print('')
