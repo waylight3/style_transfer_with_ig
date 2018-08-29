@@ -1,4 +1,4 @@
-# Style Transfer with IG
+# Style Transfer with Integrated Gradients
 
 ## Basic Seq2Seq Model
  * Now working: In Seop, Youn
