@@ -2,12 +2,6 @@ import tensorflow as tf
 import argparse, json, sys, os
 from util.util import pgbar
 
-# a = tf.placeholder(tf.float32, [None, 32])
-# b = tf.placeholder(tf.float32, [None, 32])
-# c = tf.concat([a, b], axis=0)
-# print(c.shape)
-
-# exit()
 if __name__ == '__main__':
 	### parsing arguments
 	parser = argparse.ArgumentParser(description='This is main file of the seq2seq2 sub project')
@@ -41,7 +35,9 @@ if __name__ == '__main__':
 	cell_dec = tf.nn.rnn_cell.LSTMCell(num_units=word2vec_dim)
 	outputs_dec, state_dec = tf.nn.dynamic_rnn(cell=cell_dec, dtype=tf.float32, sequence_length=X_len, inputs=x_inner, scope='g2')
 	logits = tf.nn.softmax(outputs_dec)
-	loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=outputs_dec, labels=Y))
+	# weights = tf.ones([1, max_sent_len])
+	# loss = tf.reduce_mean(tf.contrib.seq2seq.sequence_loss(logits=logits, targets=Y, weights=weights))
+	loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=Y))
 	train = tf.train.AdamOptimizer(0.001).minimize(loss)
 	with tf.Session() as sess:
 		sess.run(tf.global_variables_initializer())
