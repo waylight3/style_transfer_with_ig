@@ -57,6 +57,8 @@ if __name__ == '__main__':
 		sents = sent_tokenize(d['text'].strip())
 		for sent in sents:
 			words = word_tokenize(sent.strip())
+			# skip if sentence is too long
+			if len(words) > max_sent_len: continue
 			for word in words:
 				if not word in word_cnt:
 					word_cnt[word] = 0
@@ -95,9 +97,13 @@ if __name__ == '__main__':
 	for d in pgbar(data, pre='[data split]'):
 		sents = sent_tokenize(d['text'].strip())
 		for sent in sents:
+			words = word_tokenize(sent.strip())
+			# skip if sentence is too long
+			if len(words) > max_sent_len: continue
 			data_ret.append({'text':sent, 'stars':d['stars']})
 	random.shuffle(data_ret)
 	data_ret = data_ret[:return_data_size]
+	print('[PREPRO] total %d sentences catched' % len(data_ret))
 
 	# split into train/dev/test
 	data_size = len(data_ret)

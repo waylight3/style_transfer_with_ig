@@ -6,6 +6,7 @@ if __name__ == '__main__':
 	### parsing arguments
 	parser = argparse.ArgumentParser(description='This is main file of the seq2seq2 sub project')
 	parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'])
+	parser.add_argument('--use_word2vec', type=str, default='true', choices=['true', 'false'])
 	args = parser.parse_args()
 	word2vec_dim = 5 # fix dimension to 100 for reduce calculation speed
 	vocab_dim = 000
