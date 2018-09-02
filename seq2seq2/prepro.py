@@ -22,7 +22,7 @@ if __name__ == '__main__':
 	train_ratio = args.train_ratio
 	dev_ratio = args.dev_ratio
 	max_sent_len = args.max_sent_len
-	memory_saving_mode = True args.memory_saving_mode == 'true' else False
+	memory_saving_mode = True if args.memory_saving_mode == 'true' else False
 	
 	### data list for splitted data
 	data = []
