@@ -10,8 +10,8 @@ if __name__ == '__main__':
 	parser.add_argument('--return_data_size', type=int, default=100000, help='number of data to return (use all if total_data_size = 0)')
 	parser.add_argument('--train_ratio', type=float, default=0.7)
 	parser.add_argument('--dev_ratio', type=float, default=0.2)
-	parser.add_argument('--word_top', type=int, default=1000)
-	parser.add_argument('--max_sent_len', type=int, default=20)
+	parser.add_argument('--max_word', type=int, default=6000, help='maximum total number of words')
+	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence')
 	args = parser.parse_args()
 
 	### data split ratio for cross validation
@@ -28,7 +28,7 @@ if __name__ == '__main__':
 	data_test = []
 
 	### for word2vec dict
-	word_top = args.word_top
+	max_word = args.max_word
 	word_dict = {}
 	word_cnt = {}
 
@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
 
 	#################### prepro word2vec ####################
-	print('[PREPRO] setting: word_top(%d)' % word_top)
+	print('[PREPRO] setting: max_word(%d)' % max_word)
 
 	### split into sentences/words and count all words
 	print('[PREPRO] counting words start')
@@ -68,7 +68,7 @@ if __name__ == '__main__':
 	### count words and find top words
 	total_word = len(word_cnt)
 	print('[PREPRO] total %d words find' % total_word)
-	word_set = set(sorted(word_cnt, key=lambda w:word_cnt[w], reverse=True)[:word_top])
+	word_set = set(sorted(word_cnt, key=lambda w:word_cnt[w], reverse=True)[:max_word])
 
 	word2vec_result = []
 
