@@ -20,7 +20,7 @@ if __name__ == '__main__':
 	vocab_dim = 1 # zero(0) is used for UNKOWN symbol
 	latent_dim = 10 # must be even
 	max_sent_len = 20
-	batch_size = 20 # prefer to be a multiple of data size
+	batch_size = 100 # prefer to be a multiple of data size
 	with open('seq2seq2/data/word2vec.data', encoding='utf-8') as fp:
 		lines = fp.read().strip().split('\n')
 		for line in pgbar(lines, pre='[word2vec.data]'):
@@ -94,7 +94,7 @@ if __name__ == '__main__':
 				for batch in range(data_size // batch_size):	
 					feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size]}
 					_, now_loss, now_acc = sess.run([train, loss, accuracy], feed_dict=feed_dict)
-					if batch % 100 == 0:
+					if batch % 1 == 0:
 						print('===== %d / %d =====' % (epoch, batch))
 						print('loss : %f' % now_loss)
 						print('acc  : %f' % now_acc)

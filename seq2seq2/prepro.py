@@ -6,12 +6,14 @@ from util.util import pgbar
 if __name__ == '__main__':
 	### parsing arguments
 	parser = argparse.ArgumentParser(description='This is main file of the seq2seq2 sub project')
-	parser.add_argument('--total_data_size', type=int, default=100000, help='number of data to prepro (use all if total_data_size = 0)')
-	parser.add_argument('--return_data_size', type=int, default=100000, help='number of data to return (use all if total_data_size = 0)')
+	parser.add_argument('--total_data_size', type=int, default=10000, help='number of data to prepro (use all if total_data_size = 0)')
+	parser.add_argument('--return_data_size', type=int, default=10000, help='number of data to return (use all if total_data_size = 0)')
 	parser.add_argument('--train_ratio', type=float, default=0.7)
 	parser.add_argument('--dev_ratio', type=float, default=0.2)
 	parser.add_argument('--max_word', type=int, default=6000, help='maximum total number of words')
 	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence')
+	parser.add_argument('--memory_saving_mode', type=str, default='false', choices=['true', 'false'])
+
 	args = parser.parse_args()
 
 	### data split ratio for cross validation
@@ -20,6 +22,7 @@ if __name__ == '__main__':
 	train_ratio = args.train_ratio
 	dev_ratio = args.dev_ratio
 	max_sent_len = args.max_sent_len
+	memory_saving_mode = True args.memory_saving_mode == 'true' else False
 	
 	### data list for splitted data
 	data = []
@@ -38,8 +41,15 @@ if __name__ == '__main__':
 	### read data line by line
 	print('[PREPRO] loading yelp data start')
 	with open('data/yelp/yelp_academic_dataset_review.json', 'r', encoding='utf-8') as fp:
-		for d in pgbar(fp.read().strip().split('\n'), pre='[yelp_academic_dataset_review.json]'):
-			data.append(json.loads(d))
+		if memory_saving_mode:
+			while True:
+				d = fp.readline()
+				if not d: break
+				data.append(json.loads(d))
+				if len(data) >= total_data_size: break
+		else:
+			for d in pgbar(fp.read().strip().split('\n'), pre='[yelp_academic_dataset_review.json]'):
+				data.append(json.loads(d))
 	print('[PREPRO] loading yelp data finish (total %d lines)' % len(data))
 
 	# shuffle data to remove order-bias
