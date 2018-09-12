@@ -115,8 +115,9 @@ if __name__ == '__main__':
 							print_data.append(['original', ' '.join([idx2word[idx] for idx in data_y[test_idx]])])
 							print_data.append(['predict', ' '.join([idx2word[idx] for idx in ret[0]])])
 							if i != 4: print_data.append([])
+						print('\n')
 						print_table(print_data, title='%d epoch / %d batch' % (epoch, batch + 1), min_width=os.get_terminal_size()[0] - 1)
-						print('\n\n')
+						print()
 
 
 	elif mode == 'test':
