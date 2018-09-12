@@ -26,3 +26,44 @@ def pgbar(data, pre='', post='', bar_icon='=', space_icon=' ', total_display=100
 		if i == size - 1:
 			print('')
 		yield d
+
+def prints(*args):
+	try:
+		print(*args)
+	except Exception as e:
+		print(e)
+
+def print_table(table, title='Title', min_width=0):
+	### find error and finish
+	if len(table) < 1:
+		print('[func::print_table] ERROR: NO ROW DATA')
+		return
+
+	if len(table[0]) < 1:
+		print('[func::print_table] ERROR: NO COLUMN DATA')
+		return
+
+	### get max width of hole table and each col
+	max_col = [0 for i in range(len(table[0]))]
+	for tr in table:
+		for i, td in enumerate(tr):
+			now_col = len(str(td)) + 2
+			max_col[i] = max(max_col[i], now_col)
+	max_width = max(sum(max_col) + len(max_col) + 1, len(title) + 4)
+	if max_width < min_width:
+		max_col[-1] += min_width - max_width
+		max_width = min_width
+
+	### print table
+	print('+' + '-' * (max_width - 2) + '+')
+	print('|%s%s%s|' % (' ' * ((max_width - len(title) - 2) // 2), title, ' ' * ((max_width - len(title) - 1) // 2)))
+	print('+' + '-' * (max_width - 2) + '+')
+	for tr in table:
+		print('+' + '-' * (max_width - 2) + '+')
+		if len(tr) < 1:
+			continue
+		print('|', end='')
+		for i, td in enumerate(tr):
+			print(' %s%s' % (td , ' ' * (max_col[i] - len(str(td)) - 1)) + '|', end='')
+		print()
+	print('+' + '-' * (max_width - 2) + '+')
