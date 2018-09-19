@@ -3,6 +3,7 @@ import argparse, random, random, json, sys, os
 from util.util import pgbar, prints, print_table
 from nltk.tokenize import sent_tokenize, word_tokenize
 from tensorflow.python.layers import core as layers_core
+from tensorflow.contrib import layers
 import win_unicode_console
 
 win_unicode_console.enable()
@@ -14,8 +15,8 @@ if __name__ == '__main__':
 	parser.add_argument('--latent_dim', type=int, default=100)
 	parser.add_argument('--embedding_dim', type=int, default=100)
 	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence')
-	parser.add_argument('--batch_size', type=int, default=20, help='size of each batch. prefer to be a multiple of data size')
-	parser.add_argument('--learning_rate', type=float, default=0.001)
+	parser.add_argument('--batch_size', type=int, default=50, help='size of each batch. prefer to be a multiple of data size')
+	parser.add_argument('--learning_rate', type=float, default=0.01)
 	parser.add_argument('--use_word2vec', type=str, default='false', choices=['true', 'false'])
 	args = parser.parse_args()
 	
@@ -62,9 +63,9 @@ if __name__ == '__main__':
 		embedding_dim = args.embedding_dim
 
 	data_x = []
-	data_x_len = []
-	data_mask = []
+	data_x_len = []	
 	data_y = []
+	data_mask = []
 	data_size = 0
 
 	### for word2vec mode
@@ -134,20 +135,25 @@ if __name__ == '__main__':
 	# X = tf.placeholder(tf.float32, [None, max_sent_len, word2vec_dim])
 	X_len = tf.placeholder(tf.int32, [None])
 	Y = tf.placeholder(tf.int32, [None, max_sent_len])
+	Y_len = tf.placeholder(tf.int32, [None])
 	Y_mask = tf.placeholder(tf.float32, [None, max_sent_len])
 
-	init = tf.contrib.layers.xavier_initializer()
-	embedding = tf.get_variable('embedding', shape=[vocab_dim, embedding_dim], initializer=init, dtype=tf.float32)
-	inputs_enc = tf.nn.embedding_lookup(embedding, X)
-	# inputs_enc = X
+	# init = tf.contrib.layers.xavier_initializer()
+	# embedding = tf.get_variable('embedding', shape=[vocab_dim, embedding_dim], initializer=init, dtype=tf.float32)
+	# inputs_enc = tf.nn.embedding_lookup(embedding, X)
+	inputs_enc = layers.embed_sequence(X, vocab_size=vocab_dim, embed_dim=embedding_dim)
+	outputs_enc = layers.embed_sequence(Y, vocab_size=vocab_dim, embed_dim=embedding_dim)
 	cell_enc = tf.contrib.rnn.BasicLSTMCell(num_units=latent_dim)
 	outputs_enc, state_enc = tf.nn.dynamic_rnn(cell=cell_enc, inputs=inputs_enc, sequence_length=X_len, dtype=tf.float32, scope='g1')
-	cell_dec = tf.contrib.rnn.BasicLSTMCell(num_units=latent_dim, state_is_tuple=False)
-	# helper = tf.contrib.seq2seq.TrainingHelper(tf.zeros_like(inputs_enc), X_len)
-	helper = tf.contrib.seq2seq.TrainingHelper(inputs_enc, X_len)
+	# attention_mechanism = tf.contrib.seq2seq.BahdanauAttention(num_units=latent_dim, memory=outputs_enc, memory_sequence_length=X_len)
+	cell_dec = tf.contrib.rnn.BasicLSTMCell(num_units=latent_dim, state_is_tuple=False) # state_is_tuple=False
+	# cell_dec_attn = tf.contrib.seq2seq.AttentionWrapper(cell_dec, attention_mechanism, attention_layer_size=latent_dim)
+	# cell_dec_out = tf.contrib.rnn.OutputProjectionWrapper(cell_dec_attn, vocab_dim)
+	helper_train = tf.contrib.seq2seq.TrainingHelper(outputs_enc, Y_len)
 	init = tf.concat([state_enc.h, state_enc.c], axis=-1)
+	# init = cell_dec_attn.zero_state(dtype=tf.float32, batch_size=batch_size)
 	projection_layer = layers_core.Dense(vocab_dim, use_bias=False)
-	decoder = tf.contrib.seq2seq.BasicDecoder(cell=cell_dec, helper=helper, initial_state=init, output_layer=projection_layer)
+	decoder = tf.contrib.seq2seq.BasicDecoder(cell=cell_dec, helper=helper_train, initial_state=init, output_layer=projection_layer) # cell=cell_dec_attn
 	outputs_dec, last_state, last_seq_len = tf.contrib.seq2seq.dynamic_decode(decoder=decoder, impute_finished=True, maximum_iterations=max_sent_len)
 	loss = tf.contrib.seq2seq.sequence_loss(logits=outputs_dec.rnn_output, targets=Y, weights=Y_mask)
 	optimizer = tf.train.AdamOptimizer(learning_rate)
@@ -160,7 +166,7 @@ if __name__ == '__main__':
 			sess.run(tf.global_variables_initializer())
 			for epoch in range(1, 11):
 				for batch in range(data_size // batch_size):
-					feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size], Y_mask:data_mask[batch*batch_size:(batch+1)*batch_size]}
+					feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size], Y_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:data_mask[batch*batch_size:(batch+1)*batch_size]}
 					_, now_loss, test = sess.run([train, loss, inputs_enc], feed_dict=feed_dict)
 					if batch % 1 == 0:
 						print_data = []
@@ -168,7 +174,7 @@ if __name__ == '__main__':
 						print_data.append([])
 						for i in range(5):
 							test_idx = random.randrange(data_size)
-							ret = sess.run(outputs_dec, feed_dict={X:data_x[test_idx:test_idx+1], X_len:data_x_len[test_idx:test_idx+1], Y:data_y[test_idx:test_idx+1]})
+							ret = sess.run(outputs_dec, feed_dict={X:data_x[test_idx:test_idx+1], X_len:data_x_len[test_idx:test_idx+1], Y:data_y[test_idx:test_idx+1], Y_len:data_x_len[test_idx:test_idx+1], Y_mask:data_mask[test_idx:test_idx+1]})
 							print_data.append(['original', ' '.join([idx2word[idx] for idx in data_y[test_idx]])])
 							print_data.append(['predict', ' '.join([idx2word[idx] for idx in ret.sample_id[0]])])
 							if i != 4: print_data.append([])

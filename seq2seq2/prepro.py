@@ -10,8 +10,9 @@ if __name__ == '__main__':
 	parser.add_argument('--return_data_size', type=int, default=10000, help='number of data to return (use all if total_data_size = 0)')
 	parser.add_argument('--train_ratio', type=float, default=0.7)
 	parser.add_argument('--dev_ratio', type=float, default=0.2)
-	parser.add_argument('--max_word', type=int, default=8000, help='maximum total number of words')
+	parser.add_argument('--max_word', type=int, default=10000, help='maximum total number of words')
 	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence')
+	parser.add_argument('--min_sent_len', type=int, default=5, help='minimum number of words in each sentence')
 	parser.add_argument('--memory_saving_mode', type=str, default='false', choices=['true', 'false'])
 
 	args = parser.parse_args()
@@ -22,6 +23,7 @@ if __name__ == '__main__':
 	train_ratio = args.train_ratio
 	dev_ratio = args.dev_ratio
 	max_sent_len = args.max_sent_len
+	min_sent_len = args.min_sent_len
 	memory_saving_mode = True if args.memory_saving_mode == 'true' else False
 	
 	### data list for splitted data
@@ -67,8 +69,8 @@ if __name__ == '__main__':
 		sents = sent_tokenize(d['text'].strip())
 		for sent in sents:
 			words = word_tokenize(sent.strip())
-			# skip if sentence is too long
-			if len(words) > max_sent_len: continue
+			# skip if sentence is too long or short
+			if len(words) > max_sent_len or len(words) < min_sent_len: continue
 			for word in words:
 				if not word in word_cnt:
 					word_cnt[word] = 0
@@ -113,7 +115,7 @@ if __name__ == '__main__':
 		for sent in sents:
 			words = word_tokenize(sent.strip())
 			# skip if sentence is too long
-			if len(words) > max_sent_len: continue
+			if len(words) > max_sent_len or len(words) < min_sent_len: continue
 			data_ret.append({'text':sent, 'stars':d['stars']})
 	random.shuffle(data_ret)
 	data_ret = data_ret[:return_data_size]
