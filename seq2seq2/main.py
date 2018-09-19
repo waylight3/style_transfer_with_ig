@@ -28,7 +28,6 @@ if __name__ == '__main__':
 	max_sent_len = args.max_sent_len
 	batch_size = args.batch_size
 	learning_rate = args.learning_rate
-	embedding_dim = 100
 	with open('seq2seq2/data/word2vec.data', encoding='utf-8') as fp:
 		lines = fp.read().strip().split('\n')
 		for line in pgbar(lines, pre='[word2vec.data]'):
@@ -40,7 +39,8 @@ if __name__ == '__main__':
 			word2idx[word] = vocab_dim
 			idx2word[vocab_dim] = word
 			vocab_dim += 1
-
+	embedding_dim = 100
+	
 	data_x = []
 	data_x_len = []
 	data_y = []
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 				sent_idx.append(END)
 			data_x.append([GO] + sent_idx)
 			data_y.append(sent_idx + [END])
-			data_x_len.append(len(sent_idx))
+			data_x_len.append(len(sent_idx) + 1)
 			data_size += 1
 	max_sent_len += 1
 
@@ -116,20 +116,22 @@ if __name__ == '__main__':
 			for epoch in range(1, 11):
 				for batch in range(data_size // batch_size):
 					feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size]}
-					_, now_loss = sess.run([train, loss], feed_dict=feed_dict)
-					if batch % 1 == 0:
-						print_data = []
-						print_data.append(['loss', now_loss])
-						print_data.append([])
-						for i in range(5):
-							test_idx = random.randrange(data_size)
-							ret = sess.run(outputs_dec, feed_dict={X:data_x[test_idx:test_idx+1], X_len:data_x_len[test_idx:test_idx+1], Y:data_y[test_idx:test_idx+1]})
-							print_data.append(['original', ' '.join([idx2word[idx] for idx in data_y[test_idx]])])
-							print_data.append(['predict', ' '.join([idx2word[idx] for idx in ret.sample_id[0]])])
-							if i != 4: print_data.append([])
-						print('\n')
-						print_table(print_data, title='%d epoch / %d batch' % (epoch, batch + 1), min_width=os.get_terminal_size()[0] - 1)
-						print()
+					_, now_loss, test = sess.run([train, loss, inputs_enc], feed_dict=feed_dict)
+					print(epoch, batch, now_loss)
+					print(test)
+					# if batch % 1 == 0:
+					# 	print_data = []
+					# 	print_data.append(['loss', now_loss])
+					# 	print_data.append([])
+					# 	for i in range(5):
+					# 		test_idx = random.randrange(data_size)
+					# 		ret = sess.run(outputs_dec, feed_dict={X:data_x[test_idx:test_idx+1], X_len:data_x_len[test_idx:test_idx+1], Y:data_y[test_idx:test_idx+1]})
+					# 		print_data.append(['original', ' '.join([idx2word[idx] for idx in data_y[test_idx]])])
+					# 		print_data.append(['predict', ' '.join([idx2word[idx] for idx in ret.sample_id[0]])])
+					# 		if i != 4: print_data.append([])
+					# 	print('\n')
+					# 	print_table(print_data, title='%d epoch / %d batch' % (epoch, batch + 1), min_width=os.get_terminal_size()[0] - 1)
+					# 	print()
 
 		# with open('seq2seq2/data/train.data', encoding='utf-8') as fp:
 		# 	lines = fp.read().strip().split('\n')
