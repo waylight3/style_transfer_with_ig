@@ -4,6 +4,7 @@
 data/
 seq2seq/data
 seq2seq2/data
+seq2seq2/out
 
 # ============ #
 # OS generated #

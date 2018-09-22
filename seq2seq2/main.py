@@ -4,19 +4,22 @@ from util.util import pgbar, prints, print_table
 from nltk.tokenize import sent_tokenize, word_tokenize
 from tensorflow.python.layers import core as layers_core
 from tensorflow.contrib import layers
+import matplotlib.pyplot as plt
 import win_unicode_console
 
 win_unicode_console.enable()
+tf.set_random_seed(2015147554)
 
 if __name__ == '__main__':
 	### parsing arguments
 	parser = argparse.ArgumentParser(description='This is main file of the seq2seq2 sub project')
-	parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'])
+	parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'visualize'])
 	parser.add_argument('--latent_dim', type=int, default=100)
 	parser.add_argument('--embedding_dim', type=int, default=100)
 	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence')
 	parser.add_argument('--batch_size', type=int, default=50, help='size of each batch. prefer to be a multiple of data size')
 	parser.add_argument('--learning_rate', type=float, default=0.01)
+	parser.add_argument('--total_epoch', type=int, default=15)
 	parser.add_argument('--use_word2vec', type=str, default='false', choices=['true', 'false'])
 	args = parser.parse_args()
 	
@@ -36,6 +39,7 @@ if __name__ == '__main__':
 	max_sent_len = args.max_sent_len
 	batch_size = args.batch_size
 	learning_rate = args.learning_rate
+	total_epoch = args.total_epoch
 	use_word2vec = True if args.use_word2vec == 'true' else False
 
 	### for word2vec mode
@@ -77,7 +81,7 @@ if __name__ == '__main__':
 				sent_vec = []
 				sent_mask = []
 				temp = json.loads(line)
-				words = word_tokenize(temp['text'])
+				words = temp['text'].split()
 				for word in words:
 					if word in word2idx:
 						sent_idx.append(word2idx[word])
@@ -107,7 +111,7 @@ if __name__ == '__main__':
 				sent_idx = []
 				sent_mask = []
 				temp = json.loads(line)
-				words = word_tokenize(temp['text'])
+				words = temp['text'].split()
 				for word in words:
 					if word in word2idx:
 						sent_idx.append(word2idx[word])
@@ -162,9 +166,12 @@ if __name__ == '__main__':
 
 	#################### main logic ####################
 	if mode == 'train':
+		lengths = []
+		words_cnt = {}
+
 		with tf.Session() as sess:
 			sess.run(tf.global_variables_initializer())
-			for epoch in range(1, 11):
+			for epoch in range(1, 1 + total_epoch):
 				for batch in range(data_size // batch_size):
 					feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size], Y_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:data_mask[batch*batch_size:(batch+1)*batch_size]}
 					_, now_loss, test = sess.run([train, loss, inputs_enc], feed_dict=feed_dict)
@@ -182,5 +189,106 @@ if __name__ == '__main__':
 						print_table(print_data, title='%d epoch / %d batch' % (epoch, batch + 1), min_width=os.get_terminal_size()[0] - 1)
 						print()
 
+			### get statistics
+			for batch in range(data_size // batch_size):
+				feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size], Y_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:data_mask[batch*batch_size:(batch+1)*batch_size]}
+				ret = sess.run(outputs_dec, feed_dict=feed_dict)
+				for rs in ret.sample_id:
+					words = [idx2word[idx] for idx in rs]
+					cnt = 0
+					for word in words:
+						if word in ['.', '!', '?']:
+							break
+						cnt += 1
+						if not word in words_cnt:
+							words_cnt[word] = 0
+						words_cnt[word] += 1
+					lengths.append(cnt)
+
+			with open('seq2seq2/out/sent_lengths.txt', 'w', encoding='utf-8') as fp:
+				for length in pgbar(lengths, pre='[sent_lengths.txt]'):
+					fp.write('%s\n' % length)
+
+			words_sorted = sorted(words_cnt, key=lambda x:words_cnt[x], reverse=True)
+			with open('seq2seq2/out/words_sorted.txt', 'w', encoding='utf-8') as fp:
+				for word in pgbar(words_sorted, pre='[words_sorted]'):
+					fp.write('%s %d\n' % (word, words_cnt[word]))
+
 	elif mode == 'test':
 		print('test? comming soon...')
+
+	elif mode == 'visualize':
+		#################### load origin and predict data ####################
+		### load origin data
+		sent_lengths_origin = []
+		words_sorted_origin = []
+		words_cnt_origin = {}
+
+		with open('seq2seq2/data/train.data', 'r', encoding='utf-8') as fp:
+			lines = fp.read().strip().split('\n')
+			for line in pgbar(lines, pre='[train.data]'):
+				temp = json.loads(line)
+				words = temp['text'].split()
+				sent_lengths_origin.append(len(words))
+				for word in words:
+					if word in ['.', '!', '?']:
+						continue
+					if not word in words_cnt_origin:
+						words_cnt_origin[word] = 0
+					words_cnt_origin[word] += 1
+		words_sorted_origin = sorted(words_cnt_origin, key=lambda x:words_cnt_origin[x], reverse=True)
+		
+		sent_lengths_predict = []
+		words_sorted_predict = []
+		words_cnt_predict = {}
+
+		### load predict data
+		with open('seq2seq2/out/sent_lengths.txt', 'r', encoding='utf-8') as fp:
+			lengths = fp.read().strip().split('\n')
+			for length in pgbar(lengths, pre='[sent_lengths.txt]'):
+				sent_lengths_predict.append(int(length))
+
+		with open('seq2seq2/out/words_sorted.txt', 'r', encoding='utf-8') as fp:
+			lines = fp.read().strip().split('\n')
+			for line in lines:
+				word, cnt = line.split()
+				cnt = int(cnt)
+				words_sorted_predict.append(word)
+				words_cnt_predict[word] = cnt
+
+		print('mean sent len: %.1f' % (sum(sent_lengths_predict) / len(sent_lengths_predict)))
+		print('total word cnt: %d' % len(words_cnt_predict))
+
+		#################### draw lengths of sentences ####################
+		### draw origin data
+		x = [i for i in range(100)]
+		y = [0 for i in range(100)]
+		for length in sent_lengths_origin:
+			y[length] += 1
+		plt.bar(x, y, 0.5, color=[1, 0, 0], alpha=0.5, label='origin')
+
+		### draw predict data
+		x = [i for i in range(100)]
+		y = [0 for i in range(100)]
+		for length in sent_lengths_predict:
+			y[length] += 1
+		plt.bar(x, y, 0.5, color=[0, 0, 1], alpha=0.5, label='predict')
+		plt.legend(loc='upper right')
+		plt.show()
+		plt.clf()
+
+		#################### draw words by cnt ####################
+		### draw origin data
+		x = [i for i in range(100)]
+		y = [words_cnt_origin[word] for word in words_sorted_origin[:100]]
+		plt.bar(x, y, 0.5, color=[1, 0, 0], alpha=0.5, label='origin')
+
+		### draw predict data
+		x = [i for i in range(100)]
+		y = [words_cnt_predict[word] if word in words_cnt_predict else 0 for word in words_sorted_origin[:100]] # since we want to diff between original and predict
+		plt.bar(x, y, 0.5, color=[0, 0, 1], alpha=0.5, label='predict')
+
+		plt.xticks(x, words_sorted_origin[:100])
+		plt.legend(loc='upper right')
+		plt.show()
+		plt.clf()
