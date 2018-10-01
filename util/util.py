@@ -87,3 +87,9 @@ def seq2seq_bleu(logits, targets):
 		total_bleu += score
 	total_bleu /= batch_size
 	return total_bleu
+
+def interpolate(v1, v2, step):
+	ret = []
+	for i in range(1, step + 1):
+		ret.append([v1[j] + (v2[j] - v1[j]) * i / step for j in range(len(v1))])
+	return ret
