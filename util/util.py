@@ -1,3 +1,4 @@
+from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu
 import time, os
 
 def pgbar(data, pre='', post='', bar_icon='=', space_icon=' ', total_display=1000, show_running_time=True, end='\r'):
@@ -26,12 +27,6 @@ def pgbar(data, pre='', post='', bar_icon='=', space_icon=' ', total_display=100
 		if i == size - 1:
 			print('')
 		yield d
-
-def prints(*args):
-	try:
-		print(*args)
-	except Exception as e:
-		print(e)
 
 def print_table(table, title='Title', min_width=0):
 	### find error and finish
@@ -67,3 +62,28 @@ def print_table(table, title='Title', min_width=0):
 			print(' %s%s' % (td , ' ' * (max_col[i] - len(str(td)) - 1)) + '|', end='')
 		print()
 	print('+' + '-' * (max_width - 2) + '+')
+
+def seq2seq_accuracy(logits, targets, weights):
+	batch_size = len(logits)
+	total_acc = 0.0
+	for bc in range(batch_size):
+		acc = 0.0
+		cnt = 0.0
+		for i in range(21):
+			if weights[bc][i] < 0.01: continue
+			cnt += 1.0
+			if targets[bc][i] != logits[bc][i]: continue
+			acc += 1.0
+		acc /= cnt
+		total_acc += acc
+	total_acc /= batch_size
+	return total_acc
+
+def seq2seq_bleu(logits, targets):
+	batch_size = len(logits)
+	total_bleu = 0.0
+	for bc in range(batch_size):
+		score = sentence_bleu([targets[bc]], logits[bc], weights=(1, 0, 0, 0), smoothing_function=SmoothingFunction().method4)
+		total_bleu += score
+	total_bleu /= batch_size
+	return total_bleu
