@@ -23,6 +23,11 @@ python -m seq2seq2.main --mode train
 ```
 python -m seq2seq2.main --mode test
 ```
+### Visualize
+ * Run the code below. `--vismode` can be `ig`, `sent_len`, `word_cnt`. If `--vismode` omitted, default value is `ig`.
+```
+python -m seq2seq2.main --mode visualize --vismode ig
+```
 ## DP-GAN
  * Now working: None
  * We decided to hold on until basic seq2seq model was completed.
