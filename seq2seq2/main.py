@@ -20,9 +20,9 @@ if __name__ == '__main__':
 	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence')
 	parser.add_argument('--batch_size', type=int, default=50, help='size of each batch. prefer to be a factor of data size')
 	parser.add_argument('--learning_rate', type=float, default=0.003)
-	parser.add_argument('--total_epoch', type=int, default=10)
+	parser.add_argument('--total_epoch', type=int, default=20)
 	parser.add_argument('--use_word2vec', type=str, default='false', choices=['true', 'false'])
-	parser.add_argument('--vismode', type=str, default='ig', choices=['ig', 'sent_len', 'word_cnt'])
+	parser.add_argument('--vismode', type=str, default='ig', choices=['ig', 'sent_len', 'word_cnt', 'sent_ig_list'])
 	args = parser.parse_args()
 
 	### constants
@@ -151,6 +151,8 @@ if __name__ == '__main__':
 	optimizer = tf.train.AdamOptimizer(learning_rate)
 	train = optimizer.minimize(loss)
 
+	saver = tf.train.Saver()
+
 	#################### main logic ####################
 	if mode == 'train':
 		lengths = []
@@ -176,6 +178,8 @@ if __name__ == '__main__':
 						print('original: %s' % ' '.join([idx2word[idx] for idx in data_y[test_idx]]))
 						print('predict : %s' % ' '.join([idx2word[idx] for idx in ret.sample_id[0]]))
 				
+				saver.save(sess, 'seq2seq2/save/model_%d' % epoch)
+
 				### get IG info
 				t_grads = tf.gradients(outputs_dec, inputs_enc)
 				grads, ie = sess.run([t_grads, inputs_enc], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[1], 100), X_len:[data_x_len[1]] * 100, Y:[data_y[1]] * 100, Y_len:[data_x_len[1]] * 100, Y_mask:[data_mask[1]] * 100})
@@ -220,9 +224,9 @@ if __name__ == '__main__':
 
 			### print history
 			print_data = []
-			print_data.append(['dev loss', 'dev acc', 'dev bleu'])
+			print_data.append(['epoch', 'dev loss', 'dev acc', 'dev bleu'])
 			for epoch in range(total_epoch):
-				print_data.append(['%.4f' % history['dev_loss'][epoch], '%.4f' % history['dev_acc'][epoch], '%.4f' % history['dev_bleu'][epoch]])
+				print_data.append(['%d' % (epoch + 1), '%.4f' % history['dev_loss'][epoch], '%.4f' % history['dev_acc'][epoch], '%.4f' % history['dev_bleu'][epoch]])
 			print_table(print_data, title='history')
 
 			### save history
@@ -265,7 +269,78 @@ if __name__ == '__main__':
 					fp.write('%s %d\n' % (word, words_cnt[word]))
 
 	elif mode == 'test':
-		print('test? comming soon...')
+		test_x = []
+		test_x_len = []	
+		test_y = []
+		test_mask = []
+		test_size = 0
+
+		with open('seq2seq2/data/test.data', encoding='utf-8') as fp:
+			lines = fp.read().strip().split('\n')
+			for line in pgbar(lines, pre='[test.data]'):
+				sent_idx = []
+				sent_mask = []
+				temp = json.loads(line)
+				words = temp['text'].split()
+				star = temp['stars']
+				for word in words:
+					if word in word2idx:
+						sent_idx.append(word2idx[word])
+						sent_mask.append(1.0)
+					else:
+						sent_idx.append(UNKNOWN)
+						sent_mask.append(0.0)
+					if len(sent_idx) >= max_sent_len:
+						break
+				while len(sent_idx) < max_sent_len:
+					sent_idx.append(END)
+					sent_mask.append(0.0)
+				test_x.append([star] + sent_idx)
+				test_y.append(sent_idx + [END])
+				test_mask.append(sent_mask + [0.0])
+				test_x_len.append(len(sent_idx) + 1)
+				test_size += 1
+
+		# max_sent_len += 1
+		test_size = 100
+
+		with tf.Session() as sess:
+			sess.run(tf.global_variables_initializer())
+			saver.restore(sess, 'seq2seq2/save/model_20')
+
+			ig_list = []
+			sent_gen_list = []
+
+			for data_index in pgbar(range(test_size), pre='[test]'):
+				feed_dict={X:data_x[data_index:data_index+1], X_len:data_x_len[data_index:data_index+1], Y:data_y[data_index:data_index+1], Y_len:data_x_len[data_index:data_index+1], Y_mask:data_mask[data_index:data_index+1]}
+				ret = sess.run(outputs_dec, feed_dict=feed_dict)
+
+				sent_gen = ' '.join([idx2word[idx] for idx in ret.sample_id[0]])
+
+				### get IG info
+				t_grads = tf.gradients(outputs_dec, inputs_enc)
+				grads, ie = sess.run([t_grads, inputs_enc], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 100), X_len:[data_x_len[data_index]] * 100, Y:[data_y[data_index]] * 100, Y_len:[data_x_len[data_index]] * 100, Y_mask:[data_mask[data_index]] * 100})
+				grads = np.array(grads)
+				ie = np.array(ie[0]) # select [0] since we calc 100 data for interpolation
+				agrads = np.average(grads, axis=1)[0]
+				ig = []
+				for i in range(max_sent_len):
+					t = 0.0
+					for j in range(embedding_dim):
+						t += ie[i][j] * agrads[i][j]
+					ig.append(t)
+
+				ig_list.append(ig)
+				sent_gen_list.append(sent_gen)
+
+		### save test info
+		with open('seq2seq2/out/sent_gen_list.txt', 'w', encoding='utf-8') as fp:
+			for sg in pgbar(sent_gen_list, pre='[sent_gen_list.txt]'):
+				fp.write('%s\n' % sg)
+
+		with open('seq2seq2/out/ig_list.txt', 'w', encoding='utf-8') as fp:
+			for ig in pgbar(ig_list, pre='[ig_list.txt]'):
+				fp.write(' '.join(list(map(lambda x: '%.6f' % x, ig))) + '\n')
 
 	elif mode == 'visualize':
 		#################### load origin and predict data ####################
@@ -370,3 +445,46 @@ if __name__ == '__main__':
 			plt.legend(loc='upper right')
 			plt.show()
 			plt.clf()
+
+		#################### draw ig values of each sentence ####################
+		if vismode == 'sent_ig_list':
+			test_data = []
+			ig_list = []
+			min_val = 1000000000000
+			max_val = -1000000000000
+			star_list = []
+			data_size = 20
+
+			### load data
+			with open('seq2seq2/data/test.data', 'r', encoding='utf-8') as fp:
+				lines = fp.read().strip().split('\n')
+				for line in pgbar(lines, pre='[test.data]'):
+					temp = json.loads(line)
+					words = temp['text'].split()
+					if len(words) < 20:
+						words += [' '] * (20 - len(words))
+					test_data.append(words)
+					star_list.append(temp['stars'])
+			test_data = np.array(test_data[:data_size])
+			star_list = np.array(star_list[:data_size])
+
+			with open('seq2seq2/out/ig_list.txt', 'r', encoding='utf-8') as fp:
+				lines = fp.read().strip().split('\n')
+				for line in pgbar(lines, pre='[ig_list.txt]'):
+					temp = list(map(float, line.split()))[1:]
+					ig_list.append(rescale(temp))
+					min_val = min(min_val, min(temp))
+					max_val = min(max_val, min(temp))
+			ig_list = np.array(ig_list[:data_size])
+
+			### draw ig values
+			x = [i for i in range(len(ig_list[0]))]
+
+			fig, ax = plt.subplots()
+			fig.set_size_inches(30, data_size * 3 // 5)
+			im, cbar = heatmap(ig_list, star_list, x, ax=ax, cmap='YlGn', cbarlabel='contribution', cbar_kw={'fraction':0.1})
+			annotate_heatmap(im, texts=test_data, threshold=0.4)
+			ax.set_aspect(0.5)
+			fig.tight_layout()
+			plt.savefig('seq2seq2/out/sent_ig_list.png')
+			# plt.show()
