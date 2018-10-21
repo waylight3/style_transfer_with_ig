@@ -24,9 +24,9 @@ python -m seq2seq2.main --mode train
 python -m seq2seq2.main --mode test
 ```
 ### Visualize
- * Run the code below. `--vismode` can be `ig`, `sent_len`, `word_cnt`. If `--vismode` omitted, default value is `ig`.
+ * Run the code below. `--vismode` can be `ig`, `sent_len`, `word_cnt`, `sent_ig_list`. If `--vismode` omitted, default value is `sent_ig_list`.
 ```
-python -m seq2seq2.main --mode visualize --vismode ig
+python -m seq2seq2.main --mode visualize --vismode sent_ig_list
 ```
 ## DP-GAN
  * Now working: None

@@ -14,15 +14,15 @@ tf.set_random_seed(2015147554)
 if __name__ == '__main__':
 	### parsing arguments
 	parser = argparse.ArgumentParser(description='This is main file of the seq2seq2 sub project')
-	parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'visualize'])
-	parser.add_argument('--latent_dim', type=int, default=50)
-	parser.add_argument('--embedding_dim', type=int, default=100)
-	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence')
-	parser.add_argument('--batch_size', type=int, default=50, help='size of each batch. prefer to be a factor of data size')
-	parser.add_argument('--learning_rate', type=float, default=0.01)
-	parser.add_argument('--total_epoch', type=int, default=10)
-	parser.add_argument('--use_word2vec', type=str, default='false', choices=['true', 'false'])
-	parser.add_argument('--vismode', type=str, default='ig', choices=['ig', 'sent_len', 'word_cnt', 'sent_ig_list'])
+	parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'visualize']) # train
+	parser.add_argument('--latent_dim', type=int, default=50) # 50
+	parser.add_argument('--embedding_dim', type=int, default=100) # 100
+	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence') # 20
+	parser.add_argument('--batch_size', type=int, default=50, help='size of each batch. prefer to be a factor of data size') # 50
+	parser.add_argument('--learning_rate', type=float, default=0.01) # 0.003
+	parser.add_argument('--total_epoch', type=int, default=10) # 20
+	parser.add_argument('--use_word2vec', type=str, default='false', choices=['true', 'false']) # false
+	parser.add_argument('--vismode', type=str, default='sent_ig_list', choices=['ig', 'sent_len', 'word_cnt', 'sent_ig_list']) # sent_ig_list
 	args = parser.parse_args()
 
 	### constants
@@ -153,7 +153,7 @@ if __name__ == '__main__':
 	optimizer = tf.train.AdamOptimizer(learning_rate)
 	train = optimizer.minimize(loss)
 
-	saver = tf.train.Saver()
+	saver = tf.train.Saver(max_to_keep=total_epoch)
 
 	#################### main logic ####################
 	if mode == 'train':
@@ -308,7 +308,7 @@ if __name__ == '__main__':
 
 		with tf.Session() as sess:
 			sess.run(tf.global_variables_initializer())
-			saver.restore(sess, 'seq2seq2/save/model_20')
+			saver.restore(sess, 'seq2seq2/save/model_%d' % args.total_epoch)
 
 			ig_list = []
 			sent_gen_list = []
@@ -407,8 +407,8 @@ if __name__ == '__main__':
 			ax.imshow(ig_list, cmap='YlGn', aspect=1)
 			ax.set_xticks([i for i in range(21)])
 			ax.set_xticklabels(x_ticks[:21])
-			ax.set_yticks([i for i in range(10)])
-			ax.set_yticklabels([str(i + 1) for i in range(10)])
+			ax.set_yticks([i for i in range(total_epoch)])
+			ax.set_yticklabels([str(i + 1) for i in range(total_epoch)])
 			plt.show()
 			plt.clf()
 
@@ -452,10 +452,9 @@ if __name__ == '__main__':
 		if vismode == 'sent_ig_list':
 			test_data = []
 			ig_list = []
-			min_val = 1000000000000
-			max_val = -1000000000000
 			star_list = []
 			data_size = 20
+			# x_len = []
 
 			### load data
 			with open('seq2seq2/data/test.data', 'r', encoding='utf-8') as fp:
@@ -465,6 +464,12 @@ if __name__ == '__main__':
 					words = temp['text'].split()
 					if len(words) < 20:
 						words += [' '] * (20 - len(words))
+					# piv_end = len(words)
+					# for i, word in enumerate(words):
+					# 	if word in ['.', '!', '?', '...']:
+					# 		piv_end = i + 1
+					# 		break
+					# x_len.append(piv_end)
 					test_data.append(words)
 					star_list.append(temp['stars'])
 			test_data = np.array(test_data[:data_size])
@@ -474,9 +479,9 @@ if __name__ == '__main__':
 				lines = fp.read().strip().split('\n')
 				for line in pgbar(lines, pre='[ig_list.txt]'):
 					temp = list(map(float, line.split()))[1:]
+					# piv_end = x_len.pop(0)
+					# ig_list.append(rescale(temp[:piv_end]) + [0] * (len(temp) - piv_end))
 					ig_list.append(rescale(temp))
-					min_val = min(min_val, min(temp))
-					max_val = min(max_val, min(temp))
 			ig_list = np.array(ig_list[:data_size])
 
 			### draw ig values
