@@ -22,7 +22,7 @@ if __name__ == '__main__':
 	parser.add_argument('--learning_rate', type=float, default=0.01) # 0.003
 	parser.add_argument('--total_epoch', type=int, default=10) # 20
 	parser.add_argument('--use_word2vec', type=str, default='false', choices=['true', 'false']) # false
-	parser.add_argument('--vismode', type=str, default='sent_ig_list', choices=['ig', 'sent_len', 'word_cnt', 'sent_ig_list']) # sent_ig_list
+	parser.add_argument('--vismode', type=str, default='node_ig_list', choices=['ig', 'sent_len', 'word_cnt', 'sent_ig_list', 'node_ig_list']) # sent_ig_list
 	args = parser.parse_args()
 
 	### constants
@@ -144,7 +144,10 @@ if __name__ == '__main__':
 	cell_dec = tf.contrib.rnn.BasicLSTMCell(num_units=latent_dim, state_is_tuple=False)
 	helper_train = tf.contrib.seq2seq.TrainingHelper(outputs_enc, Y_len)
 	# init = tf.concat([state_enc.h, state_enc.c], axis=-1)
-	latent = tf.layers.dense(tf.concat([state_enc.h, state_enc.c], axis=-1), latent_dim)
+	g1 = tf.concat([state_enc.h, state_enc.c], axis=-1)
+	g2 = tf.multiply(state_enc.h, state_enc.c)
+	gg = tf.concat([g1, g2], axis=-1)
+	latent = tf.layers.dense(gg, latent_dim)
 	init = tf.layers.dense(latent, latent_dim * 2)
 	projection_layer = layers_core.Dense(vocab_dim, use_bias=False)
 	decoder = tf.contrib.seq2seq.BasicDecoder(cell=cell_dec, helper=helper_train, initial_state=init, output_layer=projection_layer)
@@ -154,6 +157,7 @@ if __name__ == '__main__':
 	train = optimizer.minimize(loss)
 
 	saver = tf.train.Saver(max_to_keep=total_epoch)
+
 
 	#################### main logic ####################
 	if mode == 'train':
@@ -312,28 +316,75 @@ if __name__ == '__main__':
 
 			ig_list = []
 			sent_gen_list = []
+			node_ig1_list=[]
+			node_ig2_list=[]
+			node_ig3_list=[]
 
 			for data_index in pgbar(range(test_size), pre='[test]'):
-				feed_dict={X:data_x[data_index:data_index+1], X_len:data_x_len[data_index:data_index+1], Y:data_y[data_index:data_index+1], Y_len:data_x_len[data_index:data_index+1], Y_mask:data_mask[data_index:data_index+1]}
-				ret = sess.run(outputs_dec, feed_dict=feed_dict)
+				#################### get ig of input ####################
+				# feed_dict={X:data_x[data_index:data_index+1], X_len:data_x_len[data_index:data_index+1], Y:data_y[data_index:data_index+1], Y_len:data_x_len[data_index:data_index+1], Y_mask:data_mask[data_index:data_index+1]}
+				# ret = sess.run(outputs_dec, feed_dict=feed_dict)
 
-				sent_gen = ' '.join([idx2word[idx] for idx in ret.sample_id[0]])
+				# sent_gen = ' '.join([idx2word[idx] for idx in ret.sample_id[0]])
 
-				### get IG info
-				t_grads = tf.gradients(outputs_dec, inputs_enc)
-				grads, ie = sess.run([t_grads, inputs_enc], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 100), X_len:[data_x_len[data_index]] * 100, Y:[data_y[data_index]] * 100, Y_len:[data_x_len[data_index]] * 100, Y_mask:[data_mask[data_index]] * 100})
+				# ### get IG info
+				# t_grads = tf.gradients(outputs_dec, inputs_enc)
+				# grads, ie = sess.run([t_grads, inputs_enc], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 100), X_len:[data_x_len[data_index]] * 100, Y:[data_y[data_index]] * 100, Y_len:[data_x_len[data_index]] * 100, Y_mask:[data_mask[data_index]] * 100})
+				# grads = np.array(grads)
+				# ie = np.array(ie[0]) # select [0] since we calc 100 data for interpolation
+				# agrads = np.average(grads, axis=1)[0]
+				# ig = []
+				# for i in range(max_sent_len):
+				# 	t = 0.0
+				# 	for j in range(embedding_dim):
+				# 		t += ie[i][j] * agrads[i][j]
+				# 	ig.append(t)
+
+				# ig_list.append(ig)
+				# sent_gen_list.append(sent_gen)
+
+				#################### get IG of g1/g2/latent ####################
+				### get IG of g1
+				t_grads = tf.gradients(outputs_dec, g1)
+				grads, _g1 = sess.run([t_grads, g1], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 50), X_len:[data_x_len[data_index]] * 50, Y:[data_y[data_index]] * 50, Y_len:[data_x_len[data_index]] * 50, Y_mask:[data_mask[data_index]] * 50})
 				grads = np.array(grads)
-				ie = np.array(ie[0]) # select [0] since we calc 100 data for interpolation
+				_g1 = np.array(_g1[0]) # select [0] since we calc 100 data for interpolation
 				agrads = np.average(grads, axis=1)[0]
+
 				ig = []
-				for i in range(max_sent_len):
-					t = 0.0
-					for j in range(embedding_dim):
-						t += ie[i][j] * agrads[i][j]
+				for i in range(embedding_dim):
+					t = _g1[i] * agrads[i]
 					ig.append(t)
 
-				ig_list.append(ig)
-				sent_gen_list.append(sent_gen)
+				node_ig1_list.append(ig)
+
+				### get IG of g2
+				t_grads = tf.gradients(outputs_dec, g2)
+				grads, _g2 = sess.run([t_grads, g2], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 50), X_len:[data_x_len[data_index]] * 50, Y:[data_y[data_index]] * 50, Y_len:[data_x_len[data_index]] * 50, Y_mask:[data_mask[data_index]] * 50})
+				grads = np.array(grads)
+				_g2 = np.array(_g2[0]) # select [0] since we calc 100 data for interpolation
+				agrads = np.average(grads, axis=1)[0]
+
+				ig = []
+				for i in range(embedding_dim // 2):
+					t = _g2[i] * agrads[i]
+					ig.append(t)
+
+				node_ig2_list.append(ig)
+
+				### get IG of latent
+				t_grads = tf.gradients(outputs_dec, latent)
+				grads, _g3 = sess.run([t_grads, latent], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 50), X_len:[data_x_len[data_index]] * 50, Y:[data_y[data_index]] * 50, Y_len:[data_x_len[data_index]] * 50, Y_mask:[data_mask[data_index]] * 50})
+				grads = np.array(grads)
+				_g3 = np.array(_g3[0]) # select [0] since we calc 100 data for interpolation
+				agrads = np.average(grads, axis=1)[0]
+
+				ig = []
+				for i in range(latent_dim):
+					t = _g3[i] * agrads[i]
+					ig.append(t)
+
+				node_ig3_list.append(ig)
 
 		### save test info
 		with open('seq2seq2/out/sent_gen_list.txt', 'w', encoding='utf-8') as fp:
@@ -342,6 +393,18 @@ if __name__ == '__main__':
 
 		with open('seq2seq2/out/ig_list.txt', 'w', encoding='utf-8') as fp:
 			for ig in pgbar(ig_list, pre='[ig_list.txt]'):
+				fp.write(' '.join(list(map(lambda x: '%.6f' % x, ig))) + '\n')
+
+		with open('seq2seq2/out/node_ig1_list.txt', 'w', encoding='utf-8') as fp:
+			for ig in pgbar(node_ig1_list, pre='[node_ig1_list.txt]'):
+				fp.write(' '.join(list(map(lambda x: '%.6f' % x, ig))) + '\n')
+
+		with open('seq2seq2/out/node_ig2_list.txt', 'w', encoding='utf-8') as fp:
+			for ig in pgbar(node_ig2_list, pre='[node_ig2_list.txt]'):
+				fp.write(' '.join(list(map(lambda x: '%.6f' % x, ig))) + '\n')
+
+		with open('seq2seq2/out/node_ig3_list.txt', 'w', encoding='utf-8') as fp:
+			for ig in pgbar(node_ig3_list, pre='[node_ig3_list.txt]'):
 				fp.write(' '.join(list(map(lambda x: '%.6f' % x, ig))) + '\n')
 
 	elif mode == 'visualize':
@@ -454,7 +517,7 @@ if __name__ == '__main__':
 			ig_list = []
 			star_list = []
 			data_size = 20
-			# x_len = []
+			x_len = []
 
 			### load data
 			with open('seq2seq2/data/test.data', 'r', encoding='utf-8') as fp:
@@ -464,12 +527,12 @@ if __name__ == '__main__':
 					words = temp['text'].split()
 					if len(words) < 20:
 						words += [' '] * (20 - len(words))
-					# piv_end = len(words)
-					# for i, word in enumerate(words):
-					# 	if word in ['.', '!', '?', '...']:
-					# 		piv_end = i + 1
-					# 		break
-					# x_len.append(piv_end)
+					piv_end = len(words)
+					for i, word in enumerate(words):
+						if word in ['.', '!', '?']:
+							piv_end = i + 1
+							break
+					x_len.append(piv_end)
 					test_data.append(words)
 					star_list.append(temp['stars'])
 			test_data = np.array(test_data[:data_size])
@@ -479,9 +542,9 @@ if __name__ == '__main__':
 				lines = fp.read().strip().split('\n')
 				for line in pgbar(lines, pre='[ig_list.txt]'):
 					temp = list(map(float, line.split()))[1:]
-					# piv_end = x_len.pop(0)
-					# ig_list.append(rescale(temp[:piv_end]) + [0] * (len(temp) - piv_end))
-					ig_list.append(rescale(temp))
+					piv_end = x_len.pop(0)
+					ig_list.append(rescale(temp[:piv_end]) + [0] * (len(temp) - piv_end))
+					# ig_list.append(rescale(temp))
 			ig_list = np.array(ig_list[:data_size])
 
 			### draw ig values
@@ -495,3 +558,58 @@ if __name__ == '__main__':
 			fig.tight_layout()
 			plt.savefig('seq2seq2/out/sent_ig_list.png')
 			# plt.show()
+
+		if vismode == 'node_ig_list':
+			node_ig1_list = []
+			node_ig2_list = []
+			node_ig3_list = []
+			with open('seq2seq2/out/node_ig1_list.txt', 'r', encoding='utf-8') as fp:
+				lines = fp.read().strip().split('\n')
+				for line in pgbar(lines, pre='[node_ig1_list.txt]'):
+					temp = list(map(float, line.split()))
+					node_ig1_list.append(temp)
+			node_ig1_list = np.array(node_ig1_list)
+
+			with open('seq2seq2/out/node_ig2_list.txt', 'r', encoding='utf-8') as fp:
+				lines = fp.read().strip().split('\n')
+				for line in pgbar(lines, pre='[node_ig2_list.txt]'):
+					temp = list(map(float, line.split()))
+					node_ig2_list.append(temp)
+			node_ig2_list = np.array(node_ig2_list)
+
+			with open('seq2seq2/out/node_ig3_list.txt', 'r', encoding='utf-8') as fp:
+				lines = fp.read().strip().split('\n')
+				for line in pgbar(lines, pre='[node_ig3_list.txt]'):
+					temp = list(map(float, line.split()))
+					node_ig3_list.append(temp)
+			node_ig3_list = np.array(node_ig3_list)
+
+			x_ticks = ['%d' % i for i in range(embedding_dim)]
+			fig, ax = plt.subplots()
+			ax.imshow(node_ig1_list, cmap='YlGn', aspect=1)
+			ax.set_xticks([i for i in range(100)])
+			ax.set_xticklabels(x_ticks)
+			ax.set_yticks([i for i in range(100)])
+			ax.set_yticklabels(['%d' % i for i in range(100)])
+			plt.show()
+			plt.clf()
+
+			x_ticks = ['%d' % i for i in range(embedding_dim // 2)]
+			fig, ax = plt.subplots()
+			ax.imshow(node_ig2_list, cmap='YlGn', aspect=1)
+			ax.set_xticks([i for i in range(50)])
+			ax.set_xticklabels(x_ticks)
+			ax.set_yticks([i for i in range(100)])
+			ax.set_yticklabels(['%d' % i for i in range(100)])
+			plt.show()
+			plt.clf()
+
+			x_ticks = ['%d' % i for i in range(latent_dim)]
+			fig, ax = plt.subplots()
+			ax.imshow(node_ig3_list, cmap='YlGn', aspect=1)
+			ax.set_xticks([i for i in range(latent_dim)])
+			ax.set_xticklabels(x_ticks)
+			ax.set_yticks([i for i in range(100)])
+			ax.set_yticklabels(['%d' % i for i in range(100)])
+			plt.show()
+			plt.clf()
