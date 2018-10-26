@@ -19,25 +19,26 @@ if __name__ == '__main__':
 	parser.add_argument('--embedding_dim', type=int, default=100) # 100
 	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence') # 20
 	parser.add_argument('--batch_size', type=int, default=50, help='size of each batch. prefer to be a factor of data size') # 50
-	parser.add_argument('--learning_rate', type=float, default=0.01) # 0.003
-	parser.add_argument('--total_epoch', type=int, default=10) # 20
+	parser.add_argument('--learning_rate', type=float, default=0.003) # 0.003
+	parser.add_argument('--total_epoch', type=int, default=20) # 20
 	parser.add_argument('--use_word2vec', type=str, default='false', choices=['true', 'false']) # false
 	parser.add_argument('--vismode', type=str, default='node_ig_list', choices=['ig', 'sent_len', 'word_cnt', 'sent_ig_list', 'node_ig_list']) # sent_ig_list
 	args = parser.parse_args()
 
 	### constants
-	# 1 ~ 5: star
 	UNKNOWN = 0
-	END = 6
+	GO = 1
+	END = 2
+	PAD = 3
 
 	### setting arguments
 	mode = args.mode
 	word2vec = {}
 	word2idx = {}
-	idx2word = {UNKNOWN:'?', 1:'_1_', 2:'_2_', 3:'_3_', 4:'_4_', 5:'_5_', END:''}
+	idx2word = {UNKNOWN:'_?_', GO:'_GO_', END:'_END_', PAD: '_PAD_'}
 	word2vec_dim = 0
 	word_list = []
-	vocab_dim = 7 # UNKNOWN(0), star(1~5), END(6) is used for symbol
+	vocab_dim = 4
 	latent_dim = args.latent_dim
 	max_sent_len = args.max_sent_len
 	batch_size = args.batch_size
@@ -59,6 +60,7 @@ if __name__ == '__main__':
 	data_x_len = []	
 	data_y = []
 	data_mask = []
+	data_star = []
 	data_size = 0
 
 	### read data
@@ -79,19 +81,21 @@ if __name__ == '__main__':
 					sent_mask.append(0.0)
 				if len(sent_idx) >= max_sent_len:
 					break
-			while len(sent_idx) < max_sent_len:
-				sent_idx.append(END)
-				sent_mask.append(0.0)
-			data_x.append([star] + sent_idx)
-			data_y.append(sent_idx + [END])
-			data_mask.append(sent_mask + [0.0])
-			data_x_len.append(len(sent_idx) + 1)
+			# while len(sent_idx) < max_sent_len:
+			# 	sent_idx.append(END)
+			# 	sent_mask.append(0.0)
+			data_x.append([GO] + sent_idx + [PAD for _ in range(max_sent_len - len(sent_idx))])
+			data_y.append(sent_idx + [END] + [PAD for _ in range(max_sent_len - len(sent_idx))])
+			data_mask.append(sent_mask + [1.0] + [0.0 for _ in range(max_sent_len - len(sent_idx))])
+			data_x_len.append(max_sent_len + 1)
+			data_star.append([1 if i + 1 == star else 0 for i in range(5)])
 			data_size += 1
 
 	dev_x = []
 	dev_x_len = []	
 	dev_y = []
 	dev_mask = []
+	dev_star = []
 	dev_size = 0
 
 	with open('seq2seq2/data/dev.data', encoding='utf-8') as fp:
@@ -111,13 +115,14 @@ if __name__ == '__main__':
 					sent_mask.append(0.0)
 				if len(sent_idx) >= max_sent_len:
 					break
-			while len(sent_idx) < max_sent_len:
-				sent_idx.append(END)
-				sent_mask.append(0.0)
-			dev_x.append([star] + sent_idx)
-			dev_y.append(sent_idx + [END])
-			dev_mask.append(sent_mask + [0.0])
-			dev_x_len.append(len(sent_idx) + 1)
+			# while len(sent_idx) < max_sent_len:
+			# 	sent_idx.append(END)
+			# 	sent_mask.append(0.0)
+			dev_x.append([GO] + sent_idx + [PAD for _ in range(max_sent_len - len(sent_idx))])
+			dev_y.append(sent_idx + [END] + [PAD for _ in range(max_sent_len - len(sent_idx))])
+			dev_mask.append(sent_mask + [1.0] + [0.0 for _ in range(max_sent_len - len(sent_idx))])
+			dev_x_len.append(max_sent_len + 1)
+			dev_star.append([1.0 if i + 1 == star else 0.0 for i in range(5)])
 			dev_size += 1
 
 	max_sent_len += 1 # +1 for _star_ and <END>
@@ -136,6 +141,7 @@ if __name__ == '__main__':
 	Y = tf.placeholder(tf.int32, [None, max_sent_len])
 	Y_len = tf.placeholder(tf.int32, [None])
 	Y_mask = tf.placeholder(tf.float32, [None, max_sent_len])
+	Star = tf.placeholder(tf.float32, [None, 5])
 
 	inputs_enc = layers.embed_sequence(X, vocab_size=vocab_dim, embed_dim=embedding_dim)
 	outputs_enc = layers.embed_sequence(Y, vocab_size=vocab_dim, embed_dim=embedding_dim)
@@ -144,10 +150,11 @@ if __name__ == '__main__':
 	cell_dec = tf.contrib.rnn.BasicLSTMCell(num_units=latent_dim, state_is_tuple=False)
 	helper_train = tf.contrib.seq2seq.TrainingHelper(outputs_enc, Y_len)
 	# init = tf.concat([state_enc.h, state_enc.c], axis=-1)
-	g1 = tf.concat([state_enc.h, state_enc.c], axis=-1)
-	g2 = tf.multiply(state_enc.h, state_enc.c)
-	gg = tf.concat([g1, g2], axis=-1)
-	latent = tf.layers.dense(gg, latent_dim)
+	# g1 = tf.concat([state_enc.h, state_enc.c], axis=-1)
+	# g2 = tf.multiply(state_enc.h, state_enc.c)
+	# gg = tf.concat([g1, g2], axis=-1)
+	g1 = tf.concat([state_enc.h, Star], axis=-1)
+	latent = tf.layers.dense(g1, latent_dim)
 	init = tf.layers.dense(latent, latent_dim * 2)
 	projection_layer = layers_core.Dense(vocab_dim, use_bias=False)
 	decoder = tf.contrib.seq2seq.BasicDecoder(cell=cell_dec, helper=helper_train, initial_state=init, output_layer=projection_layer)
@@ -169,7 +176,7 @@ if __name__ == '__main__':
 			for epoch in range(1, 1 + total_epoch):
 				now_loss, now_acc, now_bleu, batch = 0, 0, 0, 0
 				for batch in pgbar(range(data_size // batch_size), pre='[%d epoch]' % epoch):
-					feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size], Y_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:data_mask[batch*batch_size:(batch+1)*batch_size]}
+					feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size], Y_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:data_mask[batch*batch_size:(batch+1)*batch_size], Star:data_star[batch*batch_size:(batch+1)*batch_size]}
 					_, now_loss, ret, test = sess.run([train, loss, outputs_dec, inputs_enc], feed_dict=feed_dict)
 					if (batch + 1) % 20 == 0:
 						### get accuracy and bleu score
@@ -178,7 +185,7 @@ if __name__ == '__main__':
 
 						### print info
 						test_idx = random.randrange(data_size)
-						ret = sess.run(outputs_dec, feed_dict={X:data_x[test_idx:test_idx+1], X_len:data_x_len[test_idx:test_idx+1], Y:data_y[test_idx:test_idx+1], Y_len:data_x_len[test_idx:test_idx+1], Y_mask:data_mask[test_idx:test_idx+1]})
+						ret = sess.run(outputs_dec, feed_dict={X:data_x[test_idx:test_idx+1], X_len:data_x_len[test_idx:test_idx+1], Y:data_y[test_idx:test_idx+1], Y_len:data_x_len[test_idx:test_idx+1], Y_mask:data_mask[test_idx:test_idx+1], Star:data_star[test_idx:test_idx+1]})
 						if batch != data_size // batch_size - 1: print()
 						print('loss: %.4f / acc: %.4f / bleu: %.4f' % (now_loss, now_acc, now_bleu))
 						print('original: %s' % ' '.join([idx2word[idx] for idx in data_y[test_idx]]))
@@ -188,7 +195,7 @@ if __name__ == '__main__':
 
 				### get IG info
 				t_grads = tf.gradients(outputs_dec, inputs_enc)
-				grads, ie = sess.run([t_grads, inputs_enc], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[1], 100), X_len:[data_x_len[1]] * 100, Y:[data_y[1]] * 100, Y_len:[data_x_len[1]] * 100, Y_mask:[data_mask[1]] * 100})
+				grads, ie = sess.run([t_grads, inputs_enc], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[1], 100), X_len:[data_x_len[1]] * 100, Y:[data_y[1]] * 100, Y_len:[data_x_len[1]] * 100, Y_mask:[data_mask[1]] * 100, Star:[data_star[1]] * 100})
 				grads = np.array(grads)
 				ie = np.array(ie[0]) # select [0] since we calc 100 data for interpolation
 				agrads = np.average(grads, axis=1)[0]
@@ -205,7 +212,7 @@ if __name__ == '__main__':
 				dev_acc = 0.0
 				dev_bleu = 0.0
 				for batch in range(dev_size // batch_size):
-					feed_dict={X:dev_x[batch*batch_size:(batch+1)*batch_size], X_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y:dev_y[batch*batch_size:(batch+1)*batch_size], Y_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:dev_mask[batch*batch_size:(batch+1)*batch_size]}
+					feed_dict={X:dev_x[batch*batch_size:(batch+1)*batch_size], X_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y:dev_y[batch*batch_size:(batch+1)*batch_size], Y_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:dev_mask[batch*batch_size:(batch+1)*batch_size], Star:dev_star[batch*batch_size:(batch+1)*batch_size]}
 					now_loss, ret = sess.run([loss, outputs_dec], feed_dict=feed_dict)
 
 					### get accuracy and bleu score
@@ -250,8 +257,8 @@ if __name__ == '__main__':
 					fp.write('%s\n' % history['ig'][i])
 
 			### get statistics
-			for batch in range(data_size // batch_size):
-				feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size], Y_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:data_mask[batch*batch_size:(batch+1)*batch_size]}
+			for batch in range(dev_size // batch_size):
+				feed_dict={X:dev_x[batch*batch_size:(batch+1)*batch_size], X_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y:dev_y[batch*batch_size:(batch+1)*batch_size], Y_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:dev_mask[batch*batch_size:(batch+1)*batch_size], Star:dev_star[batch*batch_size:(batch+1)*batch_size]}
 				ret = sess.run(outputs_dec, feed_dict=feed_dict)
 				for rs in ret.sample_id:
 					words = [idx2word[idx] for idx in rs]
@@ -279,8 +286,10 @@ if __name__ == '__main__':
 		test_x_len = []	
 		test_y = []
 		test_mask = []
+		test_star = []
 		test_size = 0
 
+		max_sent_len -= 1
 		with open('seq2seq2/data/test.data', encoding='utf-8') as fp:
 			lines = fp.read().strip().split('\n')
 			for line in pgbar(lines, pre='[test.data]'):
@@ -298,16 +307,17 @@ if __name__ == '__main__':
 						sent_mask.append(0.0)
 					if len(sent_idx) >= max_sent_len:
 						break
-				while len(sent_idx) < max_sent_len:
-					sent_idx.append(END)
-					sent_mask.append(0.0)
-				test_x.append([star] + sent_idx)
-				test_y.append(sent_idx + [END])
-				test_mask.append(sent_mask + [0.0])
-				test_x_len.append(len(sent_idx) + 1)
+				# while len(sent_idx) < max_sent_len:
+				# 	sent_idx.append(END)
+				# 	sent_mask.append(0.0)
+				test_x.append([GO] + sent_idx + [PAD for _ in range(max_sent_len - len(sent_idx))])
+				test_y.append(sent_idx + [END] + [PAD for _ in range(max_sent_len - len(sent_idx))])
+				test_mask.append(sent_mask + [1.0] + [0.0 for _ in range(max_sent_len - len(sent_idx))])
+				test_x_len.append(max_sent_len + 1)
+				test_star.append([1.0 if i + 1 == star else 0.0 for i in range(5)])
 				test_size += 1
 
-		# max_sent_len += 1
+		max_sent_len += 1
 		test_size = 100
 
 		with tf.Session() as sess:
@@ -322,59 +332,59 @@ if __name__ == '__main__':
 
 			for data_index in pgbar(range(test_size), pre='[test]'):
 				#################### get ig of input ####################
-				# feed_dict={X:data_x[data_index:data_index+1], X_len:data_x_len[data_index:data_index+1], Y:data_y[data_index:data_index+1], Y_len:data_x_len[data_index:data_index+1], Y_mask:data_mask[data_index:data_index+1]}
-				# ret = sess.run(outputs_dec, feed_dict=feed_dict)
+				feed_dict={X:test_x[data_index:data_index+1], X_len:test_x_len[data_index:data_index+1], Y:test_y[data_index:data_index+1], Y_len:test_x_len[data_index:data_index+1], Y_mask:test_mask[data_index:data_index+1], Star:test_star[data_index:data_index+1]}
+				ret = sess.run(outputs_dec, feed_dict=feed_dict)
 
-				# sent_gen = ' '.join([idx2word[idx] for idx in ret.sample_id[0]])
+				sent_gen = ' '.join([idx2word[idx] for idx in ret.sample_id[0]])
 
-				# ### get IG info
-				# t_grads = tf.gradients(outputs_dec, inputs_enc)
-				# grads, ie = sess.run([t_grads, inputs_enc], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 100), X_len:[data_x_len[data_index]] * 100, Y:[data_y[data_index]] * 100, Y_len:[data_x_len[data_index]] * 100, Y_mask:[data_mask[data_index]] * 100})
-				# grads = np.array(grads)
-				# ie = np.array(ie[0]) # select [0] since we calc 100 data for interpolation
-				# agrads = np.average(grads, axis=1)[0]
-				# ig = []
-				# for i in range(max_sent_len):
-				# 	t = 0.0
-				# 	for j in range(embedding_dim):
-				# 		t += ie[i][j] * agrads[i][j]
-				# 	ig.append(t)
+				### get IG info
+				t_grads = tf.gradients(outputs_dec, inputs_enc)
+				grads, ie = sess.run([t_grads, inputs_enc], feed_dict={X:interpolate([0 for i in range(max_sent_len)], test_x[data_index], 100), X_len:[test_x_len[data_index]] * 100, Y:[test_y[data_index]] * 100, Y_len:[test_x_len[data_index]] * 100, Y_mask:[test_mask[data_index]] * 100, Star:[test_star[data_index]] * 100})
+				grads = np.array(grads)
+				ie = np.array(ie[0]) # select [0] since we calc 100 data for interpolation
+				agrads = np.average(grads, axis=1)[0]
+				ig = []
+				for i in range(max_sent_len):
+					t = 0.0
+					for j in range(embedding_dim):
+						t += ie[i][j] * agrads[i][j]
+					ig.append(t)
 
-				# ig_list.append(ig)
-				# sent_gen_list.append(sent_gen)
+				ig_list.append(ig)
+				sent_gen_list.append(sent_gen)
 
 				#################### get IG of g1/g2/latent ####################
 				### get IG of g1
 				t_grads = tf.gradients(outputs_dec, g1)
-				grads, _g1 = sess.run([t_grads, g1], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 50), X_len:[data_x_len[data_index]] * 50, Y:[data_y[data_index]] * 50, Y_len:[data_x_len[data_index]] * 50, Y_mask:[data_mask[data_index]] * 50})
+				grads, _g1 = sess.run([t_grads, g1], feed_dict={X:interpolate([0 for i in range(max_sent_len)], test_x[data_index], 100), X_len:[test_x_len[data_index]] * 100, Y:[test_y[data_index]] * 100, Y_len:[test_x_len[data_index]] * 100, Y_mask:[test_mask[data_index]] * 100, Star:[test_star[data_index]] * 100})
 				grads = np.array(grads)
 				_g1 = np.array(_g1[0]) # select [0] since we calc 100 data for interpolation
 				agrads = np.average(grads, axis=1)[0]
 
 				ig = []
-				for i in range(embedding_dim):
+				for i in range(embedding_dim // 2 + 5):
 					t = _g1[i] * agrads[i]
 					ig.append(t)
 
 				node_ig1_list.append(ig)
 
 				### get IG of g2
-				t_grads = tf.gradients(outputs_dec, g2)
-				grads, _g2 = sess.run([t_grads, g2], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 50), X_len:[data_x_len[data_index]] * 50, Y:[data_y[data_index]] * 50, Y_len:[data_x_len[data_index]] * 50, Y_mask:[data_mask[data_index]] * 50})
-				grads = np.array(grads)
-				_g2 = np.array(_g2[0]) # select [0] since we calc 100 data for interpolation
-				agrads = np.average(grads, axis=1)[0]
+				# t_grads = tf.gradients(outputs_dec, g2)
+				# grads, _g2 = sess.run([t_grads, g2], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 100), X_len:[data_x_len[data_index]] * 100, Y:[data_y[data_index]] * 100, Y_len:[data_x_len[data_index]] * 100, Y_mask:[data_mask[data_index]] * 100})
+				# grads = np.array(grads)
+				# _g2 = np.array(_g2[0]) # select [0] since we calc 100 data for interpolation
+				# agrads = np.average(grads, axis=1)[0]
 
-				ig = []
-				for i in range(embedding_dim // 2):
-					t = _g2[i] * agrads[i]
-					ig.append(t)
+				# ig = []
+				# for i in range(embedding_dim // 2):
+				# 	t = _g2[i] * agrads[i]
+				# 	ig.append(t)
 
-				node_ig2_list.append(ig)
+				# node_ig2_list.append(ig)
 
 				### get IG of latent
 				t_grads = tf.gradients(outputs_dec, latent)
-				grads, _g3 = sess.run([t_grads, latent], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 50), X_len:[data_x_len[data_index]] * 50, Y:[data_y[data_index]] * 50, Y_len:[data_x_len[data_index]] * 50, Y_mask:[data_mask[data_index]] * 50})
+				grads, _g3 = sess.run([t_grads, latent], feed_dict={X:interpolate([0 for i in range(max_sent_len)], test_x[data_index], 100), X_len:[test_x_len[data_index]] * 100, Y:[test_y[data_index]] * 100, Y_len:[test_x_len[data_index]] * 100, Y_mask:[test_mask[data_index]] * 100, Star:[test_star[data_index]] * 100})
 				grads = np.array(grads)
 				_g3 = np.array(_g3[0]) # select [0] since we calc 100 data for interpolation
 				agrads = np.average(grads, axis=1)[0]
@@ -399,9 +409,9 @@ if __name__ == '__main__':
 			for ig in pgbar(node_ig1_list, pre='[node_ig1_list.txt]'):
 				fp.write(' '.join(list(map(lambda x: '%.6f' % x, ig))) + '\n')
 
-		with open('seq2seq2/out/node_ig2_list.txt', 'w', encoding='utf-8') as fp:
-			for ig in pgbar(node_ig2_list, pre='[node_ig2_list.txt]'):
-				fp.write(' '.join(list(map(lambda x: '%.6f' % x, ig))) + '\n')
+		# with open('seq2seq2/out/node_ig2_list.txt', 'w', encoding='utf-8') as fp:
+		# 	for ig in pgbar(node_ig2_list, pre='[node_ig2_list.txt]'):
+		# 		fp.write(' '.join(list(map(lambda x: '%.6f' % x, ig))) + '\n')
 
 		with open('seq2seq2/out/node_ig3_list.txt', 'w', encoding='utf-8') as fp:
 			for ig in pgbar(node_ig3_list, pre='[node_ig3_list.txt]'):
@@ -517,7 +527,7 @@ if __name__ == '__main__':
 			ig_list = []
 			star_list = []
 			data_size = 20
-			x_len = []
+			# x_len = []
 
 			### load data
 			with open('seq2seq2/data/test.data', 'r', encoding='utf-8') as fp:
@@ -527,12 +537,12 @@ if __name__ == '__main__':
 					words = temp['text'].split()
 					if len(words) < 20:
 						words += [' '] * (20 - len(words))
-					piv_end = len(words)
-					for i, word in enumerate(words):
-						if word in ['.', '!', '?']:
-							piv_end = i + 1
-							break
-					x_len.append(piv_end)
+					# piv_end = len(words)
+					# for i, word in enumerate(words):
+					# 	if word in ['.', '!', '?']:
+					# 		piv_end = i + 1
+					# 		break
+					# x_len.append(piv_end)
 					test_data.append(words)
 					star_list.append(temp['stars'])
 			test_data = np.array(test_data[:data_size])
@@ -542,18 +552,20 @@ if __name__ == '__main__':
 				lines = fp.read().strip().split('\n')
 				for line in pgbar(lines, pre='[ig_list.txt]'):
 					temp = list(map(float, line.split()))[1:]
-					piv_end = x_len.pop(0)
-					ig_list.append(rescale(temp[:piv_end]) + [0] * (len(temp) - piv_end))
-					# ig_list.append(rescale(temp))
+					# piv_end = x_len.pop(0)
+					# ig_list.append(rescale(temp[:piv_end]) + [0] * (len(temp) - piv_end))
+					ig_list.append(rescale(temp))
 			ig_list = np.array(ig_list[:data_size])
 
 			### draw ig values
+			elev_min = ig_list.min()
+			elev_max = ig_list.max()
+			mid_val = 0
 			x = [i for i in range(len(ig_list[0]))]
-
 			fig, ax = plt.subplots()
 			fig.set_size_inches(30, data_size * 3 // 5)
-			im, cbar = heatmap(ig_list, star_list, x, ax=ax, cmap='YlGn', cbarlabel='contribution', cbar_kw={'fraction':0.1})
-			annotate_heatmap(im, texts=test_data, threshold=0.4)
+			im, cbar = heatmap(ig_list, star_list, x, ax=ax, cmap='seismic', cbarlabel='contribution', cbar_kw={'fraction':0.1}, clim=(elev_min, elev_max), norm=MidpointNormalize(midpoint=mid_val,vmin=elev_min, vmax=elev_max))
+			annotate_heatmap(im, texts=test_data, threshold=-0.5, threshold2=0.3)
 			ax.set_aspect(0.5)
 			fig.tight_layout()
 			plt.savefig('seq2seq2/out/sent_ig_list.png')
@@ -570,12 +582,12 @@ if __name__ == '__main__':
 					node_ig1_list.append(temp)
 			node_ig1_list = np.array(node_ig1_list)
 
-			with open('seq2seq2/out/node_ig2_list.txt', 'r', encoding='utf-8') as fp:
-				lines = fp.read().strip().split('\n')
-				for line in pgbar(lines, pre='[node_ig2_list.txt]'):
-					temp = list(map(float, line.split()))
-					node_ig2_list.append(temp)
-			node_ig2_list = np.array(node_ig2_list)
+			# with open('seq2seq2/out/node_ig2_list.txt', 'r', encoding='utf-8') as fp:
+			# 	lines = fp.read().strip().split('\n')
+			# 	for line in pgbar(lines, pre='[node_ig2_list.txt]'):
+			# 		temp = list(map(float, line.split()))
+			# 		node_ig2_list.append(temp)
+			# node_ig2_list = np.array(node_ig2_list)
 
 			with open('seq2seq2/out/node_ig3_list.txt', 'r', encoding='utf-8') as fp:
 				lines = fp.read().strip().split('\n')
@@ -584,32 +596,44 @@ if __name__ == '__main__':
 					node_ig3_list.append(temp)
 			node_ig3_list = np.array(node_ig3_list)
 
-			x_ticks = ['%d' % i for i in range(embedding_dim)]
-			fig, ax = plt.subplots()
-			ax.imshow(node_ig1_list, cmap='YlGn', aspect=1)
-			ax.set_xticks([i for i in range(100)])
-			ax.set_xticklabels(x_ticks)
-			ax.set_yticks([i for i in range(100)])
-			ax.set_yticklabels(['%d' % i for i in range(100)])
-			plt.show()
-			plt.clf()
-
+			elev_min = node_ig1_list.min()
+			elev_max = node_ig1_list.max()
+			mid_val = 0
 			x_ticks = ['%d' % i for i in range(embedding_dim // 2)]
 			fig, ax = plt.subplots()
-			ax.imshow(node_ig2_list, cmap='YlGn', aspect=1)
-			ax.set_xticks([i for i in range(50)])
-			ax.set_xticklabels(x_ticks)
+			im = ax.imshow(node_ig1_list, cmap='seismic', aspect=1, clim=(elev_min, elev_max), norm=MidpointNormalize(midpoint=mid_val,vmin=elev_min, vmax=elev_max))
+			ax.set_xticks([i for i in range(embedding_dim // 2 + 5)])
+			ax.set_xticklabels(x_ticks + ['1', '2', '3', '4', '5'])
 			ax.set_yticks([i for i in range(100)])
 			ax.set_yticklabels(['%d' % i for i in range(100)])
+			cbar = ax.figure.colorbar(im, ax=ax)
+			cbar.ax.set_ylabel('contribution', rotation=-90, va="bottom")
+			fig.tight_layout()
 			plt.show()
 			plt.clf()
 
+			# x_ticks = ['%d' % i for i in range(embedding_dim // 2)]
+			# fig, ax = plt.subplots()
+			# ax.imshow(node_ig2_list, cmap='YlGn', aspect=1)
+			# ax.set_xticks([i for i in range(50)])
+			# ax.set_xticklabels(x_ticks)
+			# ax.set_yticks([i for i in range(100)])
+			# ax.set_yticklabels(['%d' % i for i in range(100)])
+			# plt.show()
+			# plt.clf()
+
+			elev_min = node_ig3_list.min()
+			elev_max = node_ig3_list.max()
+			mid_val = 0
 			x_ticks = ['%d' % i for i in range(latent_dim)]
 			fig, ax = plt.subplots()
-			ax.imshow(node_ig3_list, cmap='YlGn', aspect=1)
+			im = ax.imshow(node_ig3_list, cmap='seismic', aspect=1, clim=(elev_min, elev_max), norm=MidpointNormalize(midpoint=mid_val,vmin=elev_min, vmax=elev_max))
 			ax.set_xticks([i for i in range(latent_dim)])
 			ax.set_xticklabels(x_ticks)
 			ax.set_yticks([i for i in range(100)])
 			ax.set_yticklabels(['%d' % i for i in range(100)])
+			cbar = ax.figure.colorbar(im, ax=ax)
+			cbar.ax.set_ylabel('contribution', rotation=-90, va="bottom")
+			fig.tight_layout()
 			plt.show()
 			plt.clf()

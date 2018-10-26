@@ -2,6 +2,7 @@ from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import time, os
 
 def pgbar(data, pre='', post='', bar_icon='=', space_icon=' ', total_display=1000, show_running_time=True, end='\r'):
@@ -211,8 +212,8 @@ def formatted_heatmap(im, data=None, valfmt="{x:.2f}",
 
 # https://matplotlib.org/gallery/images_contours_and_fields/image_annotated_heatmap.html
 def annotate_heatmap(im, data=None, texts=None,
-					 textcolors=["black", "white"],
-					 threshold=None, **textkw):
+					 textcolors=["white", "black"],
+					 threshold=None, threshold2=None, **textkw):
 	"""
 	A function to annotate a heatmap.
 
@@ -239,6 +240,8 @@ def annotate_heatmap(im, data=None, texts=None,
 		threshold = im.norm(threshold)
 	else:
 		threshold = im.norm(data.max())/2.
+	if threshold2 is not None:
+		threshold2 = im.norm(threshold2)
 
 	# Set default alignment to center, but allow it to be
 	# overwritten by textkw.
@@ -250,12 +253,36 @@ def annotate_heatmap(im, data=None, texts=None,
 	# Change the text's color depending on the data.
 	for i in range(data.shape[0]):
 		for j in range(data.shape[1]):
-			kw.update(color=textcolors[im.norm(data[i, j]) > threshold])
+			kw.update(color=textcolors[int(threshold < im.norm(data[i, j]) < threshold2)])
 			text = im.axes.text(j, i, texts[i, j], **kw)
 
 	return texts
 
-def rescale(vec, full=1):
+def rescale(vec, full=1, base='zero'):
 	min_val = min(vec)
 	max_val = max(vec)
-	return [full * (v - min_val) / (max_val - min_val) for v in vec]
+	if base == 'min':
+		base = min_val
+	elif base == 'max':
+		base = max_val
+	elif base == 'zero':
+		base = 0
+	return [full * (v - base) / (max_val - min_val) for v in vec]
+
+# http://chris35wills.github.io/matplotlib_diverging_colorbar/
+# set the colormap and centre the colorbar
+class MidpointNormalize(colors.Normalize):
+	"""
+	Normalise the colorbar so that diverging bars work there way either side from a prescribed midpoint value)
+
+	e.g. im=ax1.imshow(array, norm=MidpointNormalize(midpoint=0.,vmin=-100, vmax=100))
+	"""
+	def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
+		self.midpoint = midpoint
+		colors.Normalize.__init__(self, vmin, vmax, clip)
+
+	def __call__(self, value, clip=None):
+		# I'm ignoring masked values and all kinds of edge cases to make a
+		# simple example...
+		x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
+		return np.ma.masked_array(np.interp(value, x, y), np.isnan(value))
