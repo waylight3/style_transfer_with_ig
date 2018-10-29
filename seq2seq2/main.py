@@ -147,15 +147,11 @@ if __name__ == '__main__':
 	outputs_enc = layers.embed_sequence(Y, vocab_size=vocab_dim, embed_dim=embedding_dim)
 	cell_enc = tf.contrib.rnn.BasicLSTMCell(num_units=latent_dim)
 	outputs_enc, state_enc = tf.nn.dynamic_rnn(cell=cell_enc, inputs=inputs_enc, sequence_length=X_len, dtype=tf.float32, scope='g1')
-	cell_dec = tf.contrib.rnn.BasicLSTMCell(num_units=latent_dim, state_is_tuple=False)
+	cell_dec = tf.contrib.rnn.BasicLSTMCell(num_units=latent_dim // 2, state_is_tuple=False)
 	helper_train = tf.contrib.seq2seq.TrainingHelper(outputs_enc, Y_len)
-	# init = tf.concat([state_enc.h, state_enc.c], axis=-1)
-	# g1 = tf.concat([state_enc.h, state_enc.c], axis=-1)
-	# g2 = tf.multiply(state_enc.h, state_enc.c)
-	# gg = tf.concat([g1, g2], axis=-1)
 	g1 = tf.concat([state_enc.h, Star], axis=-1)
 	latent = tf.layers.dense(g1, latent_dim)
-	init = tf.layers.dense(latent, latent_dim * 2)
+	init = latent # tf.layers.dense(latent, latent_dim)
 	projection_layer = layers_core.Dense(vocab_dim, use_bias=False)
 	decoder = tf.contrib.seq2seq.BasicDecoder(cell=cell_dec, helper=helper_train, initial_state=init, output_layer=projection_layer)
 	outputs_dec, last_state, last_seq_len = tf.contrib.seq2seq.dynamic_decode(decoder=decoder, impute_finished=True, maximum_iterations=max_sent_len)
@@ -326,20 +322,23 @@ if __name__ == '__main__':
 
 			ig_list = []
 			sent_gen_list = []
-			node_ig1_list=[]
-			node_ig2_list=[]
-			node_ig3_list=[]
+			node_ig1_list = []
+			node_ig2_list = []
+			node_ig3_list = []
+			node_ig4_list = []
 
 			for data_index in pgbar(range(test_size), pre='[test]'):
-				#################### get ig of input ####################
-				feed_dict={X:test_x[data_index:data_index+1], X_len:test_x_len[data_index:data_index+1], Y:test_y[data_index:data_index+1], Y_len:test_x_len[data_index:data_index+1], Y_mask:test_mask[data_index:data_index+1], Star:test_star[data_index:data_index+1]}
-				ret = sess.run(outputs_dec, feed_dict=feed_dict)
+				### get tensor values
+				t_grads = tf.gradients(outputs_dec, inputs_enc)
+				t_grads1 = tf.gradients(outputs_dec, g1)
+				# t_grads2 = tf.gradients(outputs_dec, g2)
+				t_grads3 = tf.gradients(outputs_dec, latent)
+				ret, grads, grads1, grads3, ie, _g1, _g3 = sess.run([outputs_dec, t_grads, t_grads1, t_grads3, inputs_enc, g1, latent], feed_dict={X:interpolate([0 for i in range(max_sent_len)], test_x[data_index], 100), X_len:[test_x_len[data_index]] * 100, Y:[test_y[data_index]] * 100, Y_len:[test_x_len[data_index]] * 100, Y_mask:[test_mask[data_index]] * 100, Star:[test_star[data_index]] * 100})
 
+				#################### get ig of input ####################
 				sent_gen = ' '.join([idx2word[idx] for idx in ret.sample_id[0]])
 
 				### get IG info
-				t_grads = tf.gradients(outputs_dec, inputs_enc)
-				grads, ie = sess.run([t_grads, inputs_enc], feed_dict={X:interpolate([0 for i in range(max_sent_len)], test_x[data_index], 100), X_len:[test_x_len[data_index]] * 100, Y:[test_y[data_index]] * 100, Y_len:[test_x_len[data_index]] * 100, Y_mask:[test_mask[data_index]] * 100, Star:[test_star[data_index]] * 100})
 				grads = np.array(grads)
 				ie = np.array(ie[0]) # select [0] since we calc 100 data for interpolation
 				agrads = np.average(grads, axis=1)[0]
@@ -355,39 +354,33 @@ if __name__ == '__main__':
 
 				#################### get IG of g1/g2/latent ####################
 				### get IG of g1
-				t_grads = tf.gradients(outputs_dec, g1)
-				grads, _g1 = sess.run([t_grads, g1], feed_dict={X:interpolate([0 for i in range(max_sent_len)], test_x[data_index], 100), X_len:[test_x_len[data_index]] * 100, Y:[test_y[data_index]] * 100, Y_len:[test_x_len[data_index]] * 100, Y_mask:[test_mask[data_index]] * 100, Star:[test_star[data_index]] * 100})
-				grads = np.array(grads)
+				grads1 = np.array(grads1)
 				_g1 = np.array(_g1[0]) # select [0] since we calc 100 data for interpolation
-				agrads = np.average(grads, axis=1)[0]
+				agrads = np.average(grads1, axis=1)[0]
 
 				ig = []
-				for i in range(embedding_dim // 2 + 5):
+				for i in range(latent_dim + 5):
 					t = _g1[i] * agrads[i]
 					ig.append(t)
 
 				node_ig1_list.append(ig)
 
 				### get IG of g2
-				# t_grads = tf.gradients(outputs_dec, g2)
-				# grads, _g2 = sess.run([t_grads, g2], feed_dict={X:interpolate([0 for i in range(max_sent_len)], data_x[data_index], 100), X_len:[data_x_len[data_index]] * 100, Y:[data_y[data_index]] * 100, Y_len:[data_x_len[data_index]] * 100, Y_mask:[data_mask[data_index]] * 100})
-				# grads = np.array(grads)
+				# grads2 = np.array(grads2)
 				# _g2 = np.array(_g2[0]) # select [0] since we calc 100 data for interpolation
-				# agrads = np.average(grads, axis=1)[0]
+				# agrads = np.average(grads2, axis=1)[0]
 
 				# ig = []
-				# for i in range(embedding_dim // 2):
+				# for i in range(latent_dim * 2):
 				# 	t = _g2[i] * agrads[i]
 				# 	ig.append(t)
 
 				# node_ig2_list.append(ig)
 
 				### get IG of latent
-				t_grads = tf.gradients(outputs_dec, latent)
-				grads, _g3 = sess.run([t_grads, latent], feed_dict={X:interpolate([0 for i in range(max_sent_len)], test_x[data_index], 100), X_len:[test_x_len[data_index]] * 100, Y:[test_y[data_index]] * 100, Y_len:[test_x_len[data_index]] * 100, Y_mask:[test_mask[data_index]] * 100, Star:[test_star[data_index]] * 100})
-				grads = np.array(grads)
+				grads3 = np.array(grads3)
 				_g3 = np.array(_g3[0]) # select [0] since we calc 100 data for interpolation
-				agrads = np.average(grads, axis=1)[0]
+				agrads = np.average(grads3, axis=1)[0]
 
 				ig = []
 				for i in range(latent_dim):
@@ -395,6 +388,20 @@ if __name__ == '__main__':
 					ig.append(t)
 
 				node_ig3_list.append(ig)
+
+				### get IG of init
+				# t_grads = tf.gradients(outputs_dec, init)
+				# grads, _g4 = sess.run([t_grads, init], feed_dict={X:interpolate([0 for i in range(max_sent_len)], test_x[data_index], 100), X_len:[test_x_len[data_index]] * 100, Y:[test_y[data_index]] * 100, Y_len:[test_x_len[data_index]] * 100, Y_mask:[test_mask[data_index]] * 100, Star:[test_star[data_index]] * 100})
+				# grads = np.array(grads)
+				# _g4 = np.array(_g4[0]) # select [0] since we calc 100 data for interpolation
+				# agrads = np.average(grads, axis=1)[0]
+
+				# ig = []
+				# for i in range(latent_dim * 4):
+				# 	t = _g4[i] * agrads[i]
+				# 	ig.append(t)
+
+				# node_ig4_list.append(ig)
 
 		### save test info
 		with open('seq2seq2/out/sent_gen_list.txt', 'w', encoding='utf-8') as fp:
@@ -416,6 +423,10 @@ if __name__ == '__main__':
 		with open('seq2seq2/out/node_ig3_list.txt', 'w', encoding='utf-8') as fp:
 			for ig in pgbar(node_ig3_list, pre='[node_ig3_list.txt]'):
 				fp.write(' '.join(list(map(lambda x: '%.6f' % x, ig))) + '\n')
+
+		# with open('seq2seq2/out/node_ig4_list.txt', 'w', encoding='utf-8') as fp:
+		# 	for ig in pgbar(node_ig4_list, pre='[node_ig4_list.txt]'):
+		# 		fp.write(' '.join(list(map(lambda x: '%.6f' % x, ig))) + '\n')
 
 	elif mode == 'visualize':
 		#################### load origin and predict data ####################
@@ -575,6 +586,8 @@ if __name__ == '__main__':
 			node_ig1_list = []
 			node_ig2_list = []
 			node_ig3_list = []
+			node_ig4_list = []
+
 			with open('seq2seq2/out/node_ig1_list.txt', 'r', encoding='utf-8') as fp:
 				lines = fp.read().strip().split('\n')
 				for line in pgbar(lines, pre='[node_ig1_list.txt]'):
@@ -596,29 +609,42 @@ if __name__ == '__main__':
 					node_ig3_list.append(temp)
 			node_ig3_list = np.array(node_ig3_list)
 
+			# with open('seq2seq2/out/node_ig4_list.txt', 'r', encoding='utf-8') as fp:
+			# 	lines = fp.read().strip().split('\n')
+			# 	for line in pgbar(lines, pre='[node_ig4_list.txt]'):
+			# 		temp = list(map(float, line.split()))
+			# 		node_ig4_list.append(temp)
+			# node_ig4_list = np.array(node_ig4_list)
+
 			elev_min = node_ig1_list.min()
 			elev_max = node_ig1_list.max()
 			mid_val = 0
-			x_ticks = ['%d' % i for i in range(embedding_dim // 2)]
+			x_ticks = ['%d' % i for i in range(latent_dim)]
 			fig, ax = plt.subplots()
-			im = ax.imshow(node_ig1_list, cmap='seismic', aspect=1, clim=(elev_min, elev_max), norm=MidpointNormalize(midpoint=mid_val,vmin=elev_min, vmax=elev_max))
-			ax.set_xticks([i for i in range(embedding_dim // 2 + 5)])
+			im = ax.imshow(node_ig1_list, cmap='seismic', aspect=0.5, clim=(elev_min, elev_max), norm=MidpointNormalize(midpoint=mid_val,vmin=elev_min, vmax=elev_max))
+			ax.set_xticks([i for i in range(latent_dim + 5)])
 			ax.set_xticklabels(x_ticks + ['1', '2', '3', '4', '5'])
 			ax.set_yticks([i for i in range(100)])
 			ax.set_yticklabels(['%d' % i for i in range(100)])
+			fig.tight_layout()
 			cbar = ax.figure.colorbar(im, ax=ax)
 			cbar.ax.set_ylabel('contribution', rotation=-90, va="bottom")
-			fig.tight_layout()
 			plt.show()
 			plt.clf()
 
-			# x_ticks = ['%d' % i for i in range(embedding_dim // 2)]
+			# elev_min = node_ig2_list.min()
+			# elev_max = node_ig2_list.max()
+			# mid_val = 0
+			# x_ticks = ['%d' % i for i in range(latent_dim * 2)]
 			# fig, ax = plt.subplots()
-			# ax.imshow(node_ig2_list, cmap='YlGn', aspect=1)
-			# ax.set_xticks([i for i in range(50)])
+			# im = ax.imshow(node_ig2_list, cmap='seismic', aspect=0.5, clim=(elev_min, elev_max), norm=MidpointNormalize(midpoint=mid_val,vmin=elev_min, vmax=elev_max))
+			# ax.set_xticks([i for i in range(latent_dim * 2)])
 			# ax.set_xticklabels(x_ticks)
 			# ax.set_yticks([i for i in range(100)])
 			# ax.set_yticklabels(['%d' % i for i in range(100)])
+			# fig.tight_layout()
+			# cbar = ax.figure.colorbar(im, ax=ax)
+			# cbar.ax.set_ylabel('contribution', rotation=-90, va="bottom")
 			# plt.show()
 			# plt.clf()
 
@@ -627,13 +653,29 @@ if __name__ == '__main__':
 			mid_val = 0
 			x_ticks = ['%d' % i for i in range(latent_dim)]
 			fig, ax = plt.subplots()
-			im = ax.imshow(node_ig3_list, cmap='seismic', aspect=1, clim=(elev_min, elev_max), norm=MidpointNormalize(midpoint=mid_val,vmin=elev_min, vmax=elev_max))
+			im = ax.imshow(node_ig3_list, cmap='seismic', aspect=0.5, clim=(elev_min, elev_max), norm=MidpointNormalize(midpoint=mid_val,vmin=elev_min, vmax=elev_max))
 			ax.set_xticks([i for i in range(latent_dim)])
 			ax.set_xticklabels(x_ticks)
 			ax.set_yticks([i for i in range(100)])
 			ax.set_yticklabels(['%d' % i for i in range(100)])
+			fig.tight_layout()
 			cbar = ax.figure.colorbar(im, ax=ax)
 			cbar.ax.set_ylabel('contribution', rotation=-90, va="bottom")
-			fig.tight_layout()
 			plt.show()
 			plt.clf()
+
+			# elev_min = node_ig4_list.min()
+			# elev_max = node_ig4_list.max()
+			# mid_val = 0
+			# x_ticks = ['%d' % i for i in range(latent_dim * 4)]
+			# fig, ax = plt.subplots()
+			# im = ax.imshow(node_ig4_list, cmap='seismic', aspect=0.5, clim=(elev_min, elev_max), norm=MidpointNormalize(midpoint=mid_val,vmin=elev_min, vmax=elev_max))
+			# ax.set_xticks([i for i in range(latent_dim * 4)])
+			# ax.set_xticklabels(x_ticks)
+			# ax.set_yticks([i for i in range(100)])
+			# ax.set_yticklabels(['%d' % i for i in range(100)])
+			# fig.tight_layout()
+			# cbar = ax.figure.colorbar(im, ax=ax)
+			# cbar.ax.set_ylabel('contribution', rotation=-90, va="bottom")
+			# plt.show()
+			# plt.clf()
