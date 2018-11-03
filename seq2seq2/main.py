@@ -19,8 +19,8 @@ if __name__ == '__main__':
 	parser.add_argument('--embedding_dim', type=int, default=100) # 100
 	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence') # 20
 	parser.add_argument('--batch_size', type=int, default=50, help='size of each batch. prefer to be a factor of data size') # 50
-	parser.add_argument('--learning_rate', type=float, default=0.003) # 0.003
-	parser.add_argument('--total_epoch', type=int, default=20) # 20
+	parser.add_argument('--learning_rate', type=float, default=0.01) # 0.003
+	parser.add_argument('--total_epoch', type=int, default=10) # 20
 	parser.add_argument('--use_word2vec', type=str, default='false', choices=['true', 'false']) # false
 	parser.add_argument('--vismode', type=str, default='node_ig_list', choices=['ig', 'sent_len', 'word_cnt', 'sent_ig_list', 'node_ig_list']) # sent_ig_list
 	args = parser.parse_args()
@@ -87,9 +87,10 @@ if __name__ == '__main__':
 			data_x.append([GO] + sent_idx + [PAD for _ in range(max_sent_len - len(sent_idx))])
 			data_y.append(sent_idx + [END] + [PAD for _ in range(max_sent_len - len(sent_idx))])
 			data_mask.append(sent_mask + [1.0] + [0.0 for _ in range(max_sent_len - len(sent_idx))])
-			data_x_len.append(max_sent_len + 1)
+			data_x_len.append(len(sent_idx) + 1)
 			data_star.append([1 if i + 1 == star else 0 for i in range(5)])
 			data_size += 1
+
 
 	dev_x = []
 	dev_x_len = []	
@@ -121,7 +122,7 @@ if __name__ == '__main__':
 			dev_x.append([GO] + sent_idx + [PAD for _ in range(max_sent_len - len(sent_idx))])
 			dev_y.append(sent_idx + [END] + [PAD for _ in range(max_sent_len - len(sent_idx))])
 			dev_mask.append(sent_mask + [1.0] + [0.0 for _ in range(max_sent_len - len(sent_idx))])
-			dev_x_len.append(max_sent_len + 1)
+			dev_x_len.append(len(sent_idx) + 1)
 			dev_star.append([1.0 if i + 1 == star else 0.0 for i in range(5)])
 			dev_size += 1
 
@@ -136,11 +137,11 @@ if __name__ == '__main__':
 	#################### model ####################
 	tf.reset_default_graph()
 
-	X = tf.placeholder(tf.int32, [None, max_sent_len])
+	X = tf.placeholder(tf.int32, [None, None])
 	X_len = tf.placeholder(tf.int32, [None])
-	Y = tf.placeholder(tf.int32, [None, max_sent_len])
+	Y = tf.placeholder(tf.int32, [None, None])
 	Y_len = tf.placeholder(tf.int32, [None])
-	Y_mask = tf.placeholder(tf.float32, [None, max_sent_len])
+	Y_mask = tf.placeholder(tf.float32, [None, None])
 	Star = tf.placeholder(tf.float32, [None, 5])
 
 	inputs_enc = layers.embed_sequence(X, vocab_size=vocab_dim, embed_dim=embedding_dim)
@@ -148,10 +149,11 @@ if __name__ == '__main__':
 	cell_enc = tf.contrib.rnn.BasicLSTMCell(num_units=latent_dim)
 	outputs_enc, state_enc = tf.nn.dynamic_rnn(cell=cell_enc, inputs=inputs_enc, sequence_length=X_len, dtype=tf.float32, scope='g1')
 	cell_dec = tf.contrib.rnn.BasicLSTMCell(num_units=latent_dim // 2, state_is_tuple=False)
-	helper_train = tf.contrib.seq2seq.TrainingHelper(outputs_enc, Y_len)
 	g1 = tf.concat([state_enc.h, Star], axis=-1)
 	latent = tf.layers.dense(g1, latent_dim)
 	init = latent # tf.layers.dense(latent, latent_dim)
+	outputs_enc = tf.concat([outputs_enc, tf.tile(tf.expand_dims(latent, 1), [1, tf.shape(X)[1], 1])], axis=-1)
+	helper_train = tf.contrib.seq2seq.TrainingHelper(outputs_enc, Y_len)
 	projection_layer = layers_core.Dense(vocab_dim, use_bias=False)
 	decoder = tf.contrib.seq2seq.BasicDecoder(cell=cell_dec, helper=helper_train, initial_state=init, output_layer=projection_layer)
 	outputs_dec, last_state, last_seq_len = tf.contrib.seq2seq.dynamic_decode(decoder=decoder, impute_finished=True, maximum_iterations=max_sent_len)
@@ -169,15 +171,18 @@ if __name__ == '__main__':
 
 		with tf.Session() as sess:
 			sess.run(tf.global_variables_initializer())
+
 			for epoch in range(1, 1 + total_epoch):
 				now_loss, now_acc, now_bleu, batch = 0, 0, 0, 0
-				for batch in pgbar(range(data_size // batch_size), pre='[%d epoch]' % epoch):
-					feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size], Y_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:data_mask[batch*batch_size:(batch+1)*batch_size], Star:data_star[batch*batch_size:(batch+1)*batch_size]}
+				# for batch in pgbar(range(data_size // batch_size), pre='[%d epoch]' % epoch):
+				for batch, feed_dict in pgbar(make_batch(data_x, data_x_len, data_y, data_x_len, data_mask, data_star, batch_size), pre='[%d epoch]' % epoch):
+					# feed_dict={X:data_x[batch*batch_size:(batch+1)*batch_size], X_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y:data_y[batch*batch_size:(batch+1)*batch_size], Y_len:data_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:data_mask[batch*batch_size:(batch+1)*batch_size], Star:data_star[batch*batch_size:(batch+1)*batch_size]}
+					feed_dict = {X:feed_dict['X'], X_len:feed_dict['X_len'], Y:feed_dict['Y'], Y_len:feed_dict['Y_len'], Y_mask:feed_dict['Y_mask'], Star:feed_dict['Star']}
 					_, now_loss, ret, test = sess.run([train, loss, outputs_dec, inputs_enc], feed_dict=feed_dict)
 					if (batch + 1) % 20 == 0:
 						### get accuracy and bleu score
 						now_acc = seq2seq_accuracy(logits=ret.sample_id, targets=data_y[batch*batch_size:(batch+1)*batch_size], weights=data_mask[batch*batch_size:(batch+1)*batch_size])
-						now_bleu = seq2seq_bleu(logits=ret.sample_id, targets=data_y[batch*batch_size:(batch+1)*batch_size])
+						now_bleu = seq2seq_bleu(logits=ret.sample_id, targets=data_y[batch*batch_size:(batch+1)*batch_size], end=END)
 
 						### print info
 						test_idx = random.randrange(data_size)
@@ -207,13 +212,15 @@ if __name__ == '__main__':
 				dev_loss = 0.0
 				dev_acc = 0.0
 				dev_bleu = 0.0
-				for batch in range(dev_size // batch_size):
-					feed_dict={X:dev_x[batch*batch_size:(batch+1)*batch_size], X_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y:dev_y[batch*batch_size:(batch+1)*batch_size], Y_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:dev_mask[batch*batch_size:(batch+1)*batch_size], Star:dev_star[batch*batch_size:(batch+1)*batch_size]}
+				# for batch in range(dev_size // batch_size):
+				for batch, feed_dict in make_batch(dev_x, dev_x_len, dev_y, dev_x_len, dev_mask, dev_star, batch_size):
+					# feed_dict={X:dev_x[batch*batch_size:(batch+1)*batch_size], X_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y:dev_y[batch*batch_size:(batch+1)*batch_size], Y_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:dev_mask[batch*batch_size:(batch+1)*batch_size], Star:dev_star[batch*batch_size:(batch+1)*batch_size]}
+					feed_dict = {X:feed_dict['X'], X_len:feed_dict['X_len'], Y:feed_dict['Y'], Y_len:feed_dict['Y_len'], Y_mask:feed_dict['Y_mask'], Star:feed_dict['Star']}
 					now_loss, ret = sess.run([loss, outputs_dec], feed_dict=feed_dict)
 
 					### get accuracy and bleu score
 					now_acc = seq2seq_accuracy(logits=ret.sample_id, targets=data_y[batch*batch_size:(batch+1)*batch_size], weights=data_mask[batch*batch_size:(batch+1)*batch_size])
-					now_bleu = seq2seq_bleu(logits=ret.sample_id, targets=data_y[batch*batch_size:(batch+1)*batch_size])
+					now_bleu = seq2seq_bleu(logits=ret.sample_id, targets=data_y[batch*batch_size:(batch+1)*batch_size], end=END)
 					dev_loss += now_loss
 					dev_acc += now_acc
 					dev_bleu += now_bleu
@@ -253,29 +260,29 @@ if __name__ == '__main__':
 					fp.write('%s\n' % history['ig'][i])
 
 			### get statistics
-			for batch in range(dev_size // batch_size):
-				feed_dict={X:dev_x[batch*batch_size:(batch+1)*batch_size], X_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y:dev_y[batch*batch_size:(batch+1)*batch_size], Y_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:dev_mask[batch*batch_size:(batch+1)*batch_size], Star:dev_star[batch*batch_size:(batch+1)*batch_size]}
-				ret = sess.run(outputs_dec, feed_dict=feed_dict)
-				for rs in ret.sample_id:
-					words = [idx2word[idx] for idx in rs]
-					cnt = 0
-					for word in words:
-						if word in ['.', '!', '?']:
-							break
-						cnt += 1
-						if not word in words_cnt:
-							words_cnt[word] = 0
-						words_cnt[word] += 1
-					lengths.append(cnt)
+			# for batch in range(dev_size // batch_size):
+			# 	feed_dict={X:dev_x[batch*batch_size:(batch+1)*batch_size], X_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y:dev_y[batch*batch_size:(batch+1)*batch_size], Y_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:dev_mask[batch*batch_size:(batch+1)*batch_size], Star:dev_star[batch*batch_size:(batch+1)*batch_size]}
+			# 	ret = sess.run(outputs_dec, feed_dict=feed_dict)
+			# 	for rs in ret.sample_id:
+			# 		words = [idx2word[idx] for idx in rs]
+			# 		cnt = 0
+			# 		for word in words:
+			# 			if word in ['.', '!', '?']:
+			# 				break
+			# 			cnt += 1
+			# 			if not word in words_cnt:
+			# 				words_cnt[word] = 0
+			# 			words_cnt[word] += 1
+			# 		lengths.append(cnt)
 
-			### save statistics
-			with open('seq2seq2/out/sent_lengths.txt', 'w', encoding='utf-8') as fp:
-				for length in pgbar(lengths, pre='[sent_lengths.txt]'):
-					fp.write('%s\n' % length)
-			words_sorted = sorted(words_cnt, key=lambda x:words_cnt[x], reverse=True)
-			with open('seq2seq2/out/words_sorted.txt', 'w', encoding='utf-8') as fp:
-				for word in pgbar(words_sorted, pre='[words_sorted]'):
-					fp.write('%s %d\n' % (word, words_cnt[word]))
+			# ### save statistics
+			# with open('seq2seq2/out/sent_lengths.txt', 'w', encoding='utf-8') as fp:
+			# 	for length in pgbar(lengths, pre='[sent_lengths.txt]'):
+			# 		fp.write('%s\n' % length)
+			# words_sorted = sorted(words_cnt, key=lambda x:words_cnt[x], reverse=True)
+			# with open('seq2seq2/out/words_sorted.txt', 'w', encoding='utf-8') as fp:
+			# 	for word in pgbar(words_sorted, pre='[words_sorted]'):
+			# 		fp.write('%s %d\n' % (word, words_cnt[word]))
 
 	elif mode == 'test':
 		test_x = []

@@ -6,11 +6,11 @@ from util.util import pgbar
 if __name__ == '__main__':
 	### parsing arguments
 	parser = argparse.ArgumentParser(description='This is main file of the seq2seq2 sub project')
-	parser.add_argument('--total_data_size', type=int, default=10000, help='number of data to prepro (use all if total_data_size = 0)')
-	parser.add_argument('--return_data_size', type=int, default=10000, help='number of data to return (use all if total_data_size = 0)')
+	parser.add_argument('--total_data_size', type=int, default=100000, help='number of data to prepro (use all if total_data_size = 0)') # 10000
+	parser.add_argument('--return_data_size', type=int, default=100000, help='number of data to return (use all if total_data_size = 0)') # 10000
 	parser.add_argument('--train_ratio', type=float, default=0.7)
 	parser.add_argument('--dev_ratio', type=float, default=0.2)
-	parser.add_argument('--max_word', type=int, default=10000, help='maximum total number of words')
+	parser.add_argument('--max_word', type=int, default=20000, help='maximum total number of words') # 10000
 	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence')
 	parser.add_argument('--min_sent_len', type=int, default=5, help='minimum number of words in each sentence')
 	parser.add_argument('--memory_saving_mode', type=str, default='false', choices=['true', 'false'])

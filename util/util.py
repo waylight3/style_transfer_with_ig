@@ -67,13 +67,28 @@ def print_table(table, title='Title', min_width=0):
 		print()
 	print('+' + '-' * (max_width - 2) + '+')
 
+def make_batch(data_x, data_x_len, data_y, data_y_len, data_mask, data_star, batch_size):
+	data_size = len(data_x)
+	ret = []
+	for batch in range(data_size // batch_size):
+		feed_dict = {'X':data_x[batch*batch_size:(batch+1)*batch_size], 'X_len':data_x_len[batch*batch_size:(batch+1)*batch_size], 'Y':data_y[batch*batch_size:(batch+1)*batch_size], 'Y_len':data_y_len[batch*batch_size:(batch+1)*batch_size], 'Y_mask':data_mask[batch*batch_size:(batch+1)*batch_size], 'Star':data_star[batch*batch_size:(batch+1)*batch_size]}
+		max_len = max(feed_dict['X_len'])
+		for i in range(batch_size):
+			feed_dict['X'][i] = feed_dict['X'][i][:max_len]
+			feed_dict['Y'][i] = feed_dict['Y'][i][:max_len]
+			feed_dict['Y_mask'][i] = feed_dict['Y_mask'][i][:max_len]
+			feed_dict['X_len'][i] = min(feed_dict['X_len'][i], max_len)
+			feed_dict['Y_len'][i] = min(feed_dict['Y_len'][i], max_len)
+		ret.append([batch, feed_dict])
+	return ret
+
 def seq2seq_accuracy(logits, targets, weights):
 	batch_size = len(logits)
 	total_acc = 0.0
 	for bc in range(batch_size):
 		acc = 0.0
 		cnt = 0.0
-		for i in range(21):
+		for i in range(len(logits[bc])):
 			if weights[bc][i] < 0.01: continue
 			cnt += 1.0
 			if targets[bc][i] != logits[bc][i]: continue
@@ -83,11 +98,22 @@ def seq2seq_accuracy(logits, targets, weights):
 	total_acc /= batch_size
 	return total_acc
 
-def seq2seq_bleu(logits, targets):
+def seq2seq_bleu(logits, targets, end):
 	batch_size = len(logits)
 	total_bleu = 0.0
 	for bc in range(batch_size):
-		score = sentence_bleu([targets[bc]], logits[bc], weights=(1, 0, 0, 0), smoothing_function=SmoothingFunction().method4)
+		logits_end = len(logits[bc])
+		for i in range(len(logits[bc])):
+			if logits[bc][i] == end:
+				logits_end = i
+				break
+		targets_end = len(targets[bc])
+		for i in range(len(targets[bc])):
+			if targets[bc][i] == end:
+				targets_end = i
+				break
+		if logits_end <= 1 or targets_end == 0: continue
+		score = sentence_bleu([targets[bc][:targets_end]], logits[bc][:logits_end], weights=(1, 0, 0, 0), smoothing_function=SmoothingFunction().method4)
 		total_bleu += score
 	total_bleu /= batch_size
 	return total_bleu
