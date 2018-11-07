@@ -15,7 +15,7 @@ if __name__ == '__main__':
 	### parsing arguments
 	parser = argparse.ArgumentParser(description='This is main file of the seq2seq2 sub project')
 	parser.add_argument('--mode', type=str, default='train', choices=['train', 'test', 'visualize']) # train
-	parser.add_argument('--latent_dim', type=int, default=50) # 50
+	parser.add_argument('--latent_dim', type=int, default=20) # 50
 	parser.add_argument('--embedding_dim', type=int, default=100) # 100
 	parser.add_argument('--max_sent_len', type=int, default=20, help='maximum number of words in each sentence') # 20
 	parser.add_argument('--batch_size', type=int, default=50, help='size of each batch. prefer to be a factor of data size') # 50
@@ -215,12 +215,14 @@ if __name__ == '__main__':
 				# for batch in range(dev_size // batch_size):
 				for batch, feed_dict in make_batch(dev_x, dev_x_len, dev_y, dev_x_len, dev_mask, dev_star, batch_size):
 					# feed_dict={X:dev_x[batch*batch_size:(batch+1)*batch_size], X_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y:dev_y[batch*batch_size:(batch+1)*batch_size], Y_len:dev_x_len[batch*batch_size:(batch+1)*batch_size], Y_mask:dev_mask[batch*batch_size:(batch+1)*batch_size], Star:dev_star[batch*batch_size:(batch+1)*batch_size]}
+					targets = feed_dict['Y']
+					weights = feed_dict['Y_mask']
 					feed_dict = {X:feed_dict['X'], X_len:feed_dict['X_len'], Y:feed_dict['Y'], Y_len:feed_dict['Y_len'], Y_mask:feed_dict['Y_mask'], Star:feed_dict['Star']}
 					now_loss, ret = sess.run([loss, outputs_dec], feed_dict=feed_dict)
 
 					### get accuracy and bleu score
-					now_acc = seq2seq_accuracy(logits=ret.sample_id, targets=data_y[batch*batch_size:(batch+1)*batch_size], weights=data_mask[batch*batch_size:(batch+1)*batch_size])
-					now_bleu = seq2seq_bleu(logits=ret.sample_id, targets=data_y[batch*batch_size:(batch+1)*batch_size], end=END)
+					now_acc = seq2seq_accuracy(logits=ret.sample_id, targets=targets, weights=weights)
+					now_bleu = seq2seq_bleu(logits=ret.sample_id, targets=targets, end=END)
 					dev_loss += now_loss
 					dev_acc += now_acc
 					dev_bleu += now_bleu
@@ -316,7 +318,7 @@ if __name__ == '__main__':
 				test_x.append([GO] + sent_idx + [PAD for _ in range(max_sent_len - len(sent_idx))])
 				test_y.append(sent_idx + [END] + [PAD for _ in range(max_sent_len - len(sent_idx))])
 				test_mask.append(sent_mask + [1.0] + [0.0 for _ in range(max_sent_len - len(sent_idx))])
-				test_x_len.append(max_sent_len + 1)
+				test_x_len.append(len(sent_idx) + 1)
 				test_star.append([1.0 if i + 1 == star else 0.0 for i in range(5)])
 				test_size += 1
 
@@ -469,21 +471,21 @@ if __name__ == '__main__':
 		words_cnt_predict = {}
 
 		### load predict data
-		with open('seq2seq2/out/sent_lengths.txt', 'r', encoding='utf-8') as fp:
-			lengths = fp.read().strip().split('\n')
-			for length in pgbar(lengths, pre='[sent_lengths.txt]'):
-				sent_lengths_predict.append(int(length))
+		# with open('seq2seq2/out/sent_lengths.txt', 'r', encoding='utf-8') as fp:
+		# 	lengths = fp.read().strip().split('\n')
+		# 	for length in pgbar(lengths, pre='[sent_lengths.txt]'):
+		# 		sent_lengths_predict.append(int(length))
 
-		with open('seq2seq2/out/words_sorted.txt', 'r', encoding='utf-8') as fp:
-			lines = fp.read().strip().split('\n')
-			for line in pgbar(lines, pre='[words_sorted.txt]'):
-				word, cnt = line.split()
-				cnt = int(cnt)
-				words_sorted_predict.append(word)
-				words_cnt_predict[word] = cnt
+		# with open('seq2seq2/out/words_sorted.txt', 'r', encoding='utf-8') as fp:
+		# 	lines = fp.read().strip().split('\n')
+		# 	for line in pgbar(lines, pre='[words_sorted.txt]'):
+		# 		word, cnt = line.split()
+		# 		cnt = int(cnt)
+		# 		words_sorted_predict.append(word)
+		# 		words_cnt_predict[word] = cnt
 
-		print('mean sent len: %.1f' % (sum(sent_lengths_predict) / len(sent_lengths_predict)))
-		print('total word cnt: %d' % len(words_cnt_predict))
+		# print('mean sent len: %.1f' % (sum(sent_lengths_predict) / len(sent_lengths_predict)))
+		# print('total word cnt: %d' % len(words_cnt_predict))
 
 		if vismode == 'ig':
 			ig_list = []
