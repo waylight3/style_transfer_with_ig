@@ -124,6 +124,13 @@ def interpolate(v1, v2, step):
 		ret.append([v1[j] + (v2[j] - v1[j]) * i / step for j in range(len(v1))])
 	return ret
 
+def argmax(vec):
+	maxi = 0
+	for i in range(len(vec)):
+		if vec[maxi] < vec[i]:
+			maxi = i
+	return maxi
+
 # https://matplotlib.org/gallery/images_contours_and_fields/image_annotated_heatmap.html
 def heatmap(data, row_labels, col_labels, ax=None,
 			cbar_kw={}, cbarlabel="", **kwargs):
